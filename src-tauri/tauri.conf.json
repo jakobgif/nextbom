@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "decorations": false,
         "title": "nextbom",
         "width": 800,
         "height": 600
