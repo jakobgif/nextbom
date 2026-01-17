@@ -2,8 +2,11 @@ import { ListPlus, Minus, Square, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { Separator } from "./ui/separator";
 import { Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger } from "./ui/menubar";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export function Titlebar(){
+  const appWindow = getCurrentWindow();
+
   return (
     <>
       <div className="flex flex-row items-center bg-card select-none" data-tauri-drag-region>
@@ -90,12 +93,12 @@ export function Titlebar(){
           </Menubar>
           </div>
         <div className="absolute left-1/2 -translate-x-1/2">
-          <p>test</p>
+          <p className="text-muted-foreground text-sm">project</p>
         </div>
         <div className="ml-auto flex flex-row">
-          <Button variant={"ghost"} size={"icon"} className="rounded-none"><Minus className="size-4"/></Button>
-          <Button variant={"ghost"} size={"icon"} className="rounded-none"><Square className="size-3.5"/></Button>
-          <Button variant={"ghost"} size={"icon"} className="rounded-none"><X className="size-4.5"/></Button>
+          <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.minimize()}><Minus className="size-4"/></Button>
+          <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.toggleMaximize()}><Square className="size-3.5"/></Button>
+          <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.close()}><X className="size-4.5"/></Button>
         </div>
       </div>
       <Separator className="dark:hidden"/>
