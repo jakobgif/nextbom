@@ -1,6 +1,5 @@
 import { ListPlus, Minus, Square, X } from "lucide-react";
 import { Button } from "./ui/button";
-import { Separator } from "./ui/separator";
 import { Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger } from "./ui/menubar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -9,7 +8,7 @@ export function Titlebar(){
 
   return (
     <>
-      <div className="flex flex-row items-center bg-card select-none" data-tauri-drag-region>
+      <div className="flex flex-row items-center bg-card select-none shadow-2xl z-50" data-tauri-drag-region>
         <div className="flex flex-row items-center">
           <ListPlus className="size-icon mx-2 text-primary"/>
           <Menubar>
@@ -101,7 +100,6 @@ export function Titlebar(){
           <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.close()}><X className="size-4.5"/></Button>
         </div>
       </div>
-      <Separator className="dark:hidden"/>
     </>
   )
 }
