@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+/// Payload for project-changed events
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/ProjectState.ts")]
+pub struct ProjectState {
+    pub project: Option<Project>,
+    pub has_unsaved_changes: bool,
+}
+
 /// Represents a NextBOM project with all its properties
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/types/Project.ts")]
