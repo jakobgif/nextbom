@@ -6,11 +6,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Project } from "@/types/Project";
+import { NewProjectDialog } from "./new-project";
 
 export function Titlebar(){
   const appWindow = getCurrentWindow();
 
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
 
   useEffect(() => {
     // Listen for project changes from backend
@@ -31,7 +33,7 @@ export function Titlebar(){
               </MenubarTrigger>
               <MenubarContent>
                 <MenubarItem disabled>Save Project</MenubarItem>
-                <MenubarItem disabled>New Project</MenubarItem>
+                <MenubarItem onClick={() => setNewProjectDialogOpen(true)}>New Project</MenubarItem>
                 <MenubarItem disabled>Open Project</MenubarItem>
                 <MenubarSub>
                   <MenubarSubTrigger>Open Recent</MenubarSubTrigger>
@@ -98,6 +100,7 @@ export function Titlebar(){
           <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.close()}><X className="size-4.5"/></Button>
         </div>
       </div>
+      <NewProjectDialog open={newProjectDialogOpen} onOpenChange={setNewProjectDialogOpen} />
     </>
   )
 }
