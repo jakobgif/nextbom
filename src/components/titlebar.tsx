@@ -99,7 +99,7 @@ export function Titlebar(){
                 <p>Edit</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarItem>
+                {/* <MenubarItem>
                   Undo <MenubarShortcut>⌘Z</MenubarShortcut>
                 </MenubarItem>
                 <MenubarItem>
@@ -119,7 +119,7 @@ export function Titlebar(){
                 <MenubarSeparator />
                 <MenubarItem>Cut</MenubarItem>
                 <MenubarItem>Copy</MenubarItem>
-                <MenubarItem>Paste</MenubarItem>
+                <MenubarItem>Paste</MenubarItem> */}
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -130,12 +130,12 @@ export function Titlebar(){
                 <MenubarItem inset onClick={() => {
                   setTheme(theme === "dark" ? "light" : "dark");
                 }}>Toggle Theme</MenubarItem>
-                <MenubarSeparator />
+                {/* <MenubarSeparator />
                 <MenubarItem inset disabled>Report Issue</MenubarItem>
                 <MenubarSeparator />
                 <MenubarCheckboxItem disabled>Development Mode</MenubarCheckboxItem>
                 <MenubarSeparator />
-                <MenubarItem inset disabled>About</MenubarItem>
+                <MenubarItem inset disabled>About</MenubarItem> */}
               </MenubarContent>
             </MenubarMenu>
           </Menubar>
