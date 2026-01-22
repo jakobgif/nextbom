@@ -1,4 +1,6 @@
 import "./App.css";
+import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Info, ListPlus } from "lucide-react";
 import { Titlebar } from "./components/titlebar";
 import { Button } from "./components/ui/button";
@@ -9,13 +11,24 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
 import { Field, FieldDescription, FieldError, FieldLabel } from "./components/ui/field";
 import { Checkbox } from "./components/ui/checkbox";
+import { Project } from "./types/Project";
+import { NewProjectDialog } from "./components/new-project";
 
 function App() {
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+
+  useEffect(() => {
+    // Listen for project changes from backend
+    listen<Project | null>("project-changed", (event) => {
+      setCurrentProject(event.payload);
+    });
+  }, []);
+
   return (
     <div className="h-screen flex flex-col overflow-clip">
       <Titlebar/>
       <div className="flex flex-col flex-1 overflow-clip">
-        {false ? (
+        {!currentProject ? (
           <Empty className="select-none">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -28,16 +41,18 @@ function App() {
             </EmptyHeader>
             <EmptyContent>
               <div className="flex gap-2">
-                <Button>Create Project</Button>
-                <Button variant="outline">Open Project</Button>
+                <NewProjectDialog trigger={
+                  <Button>Create Project</Button>
+                } />
+                {/* <Button variant="outline">Open Project</Button> */}
               </div>
-              <div className="flex flex-col items-start min-w-60 w-[30vw] pt-2">
+              {/* <div className="flex flex-col items-start min-w-60 w-[30vw] pt-2">
                 <p className="text-lg font-medium pb-2">Recent</p>
                 <div className="flex flex-row">
                   <a href="#" className="text-start pr-10 text-primary font-medium">filename</a>
                   <div className="text-start text-muted-foreground">6:03:47 PM [vite] (client) hmr update /src/App.tsx, /src/App.css6:03:47 PM [vite] (client) hmr update /src/App.tsx, /src/App.css6:03:47</div>
                 </div>
-              </div>
+              </div> */}
             </EmptyContent>
           </Empty>
         ) : (
@@ -60,7 +75,7 @@ function App() {
           </div>
         )}
       </div>
-      <div className="w-full flex items-center justify-center bg-primary">
+      <div className="w-full flex items-center justify-center bg-primary min-h-[24px]">
         <p>test</p>
       </div>
     </div>
