@@ -91,7 +91,18 @@ function App() {
           </div>
         )}
       </div>
-      <div className="w-full flex items-center justify-center bg-primary min-h-[24px]">
+      <div className="w-full flex flex-row flex-wrap items-center justify-start bg-primary min-h-[24px] gap-x-2 px-2">
+        {currentProject &&
+          Object.entries(currentProject).map(([key, value]) => (
+            <div
+              key={key}
+              className="flex gap-1 whitespace-nowrap"
+            >
+              <span className="font-semibold">{key}:</span>
+              <span>{String(value)}</span>
+            </div>
+          ))
+        }
       </div>
     </div>
   );
