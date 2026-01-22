@@ -2,9 +2,22 @@ import { ListPlus, Minus, Square, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger } from "./ui/menubar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { Project } from "@/types/Project";
 
 export function Titlebar(){
   const appWindow = getCurrentWindow();
+
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+
+  useEffect(() => {
+    // Listen for project changes from backend
+    listen<Project | null>("project-changed", (event) => {
+      setCurrentProject(event.payload);
+    });
+  }, []);
 
   return (
     <>
@@ -17,26 +30,21 @@ export function Titlebar(){
                 <p>File</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarItem>
-                  New Tab <MenubarShortcut>⌘T</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  New Window <MenubarShortcut>⌘N</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem disabled>New Incognito Window</MenubarItem>
-                <MenubarSeparator />
+                <MenubarItem disabled>Save Project</MenubarItem>
+                <MenubarItem disabled>New Project</MenubarItem>
+                <MenubarItem disabled>Open Project</MenubarItem>
                 <MenubarSub>
-                  <MenubarSubTrigger>Share</MenubarSubTrigger>
+                  <MenubarSubTrigger>Open Recent</MenubarSubTrigger>
                   <MenubarSubContent>
-                    <MenubarItem>Email link</MenubarItem>
-                    <MenubarItem>Messages</MenubarItem>
-                    <MenubarItem>Notes</MenubarItem>
+                    <MenubarItem disabled>File</MenubarItem>
                   </MenubarSubContent>
                 </MenubarSub>
+                <MenubarItem disabled={!currentProject} onClick={() => invoke("close_project")}>Close Project</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem>
-                  Print... <MenubarShortcut>⌘P</MenubarShortcut>
-                </MenubarItem>
+                <MenubarItem disabled>Toggle Theme</MenubarItem>
+                <MenubarSeparator />
+                <MenubarItem disabled>Restart</MenubarItem>
+                <MenubarItem disabled>Exit</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -72,27 +80,17 @@ export function Titlebar(){
                 <p>Help</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarCheckboxItem>Always Show Bookmarks Bar</MenubarCheckboxItem>
-                <MenubarCheckboxItem checked>
-                  Always Show Full URLs
-                </MenubarCheckboxItem>
+                <MenubarItem inset disabled>Report Issue</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem inset>
-                  Reload <MenubarShortcut>⌘R</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem disabled inset>
-                  Force Reload <MenubarShortcut>⇧⌘R</MenubarShortcut>
-                </MenubarItem>
+                <MenubarCheckboxItem disabled>Development Mode</MenubarCheckboxItem>
                 <MenubarSeparator />
-                <MenubarItem inset>Toggle Fullscreen</MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem inset>Hide Sidebar</MenubarItem>
+                <MenubarItem inset disabled>About</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
           </Menubar>
           </div>
         <div className="absolute left-1/2 -translate-x-1/2">
-          <p className="text-muted-foreground text-sm">project</p>
+          <p className="text-muted-foreground text-sm">{currentProject?.title}</p>
         </div>
         <div className="ml-auto flex flex-row">
           <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.minimize()}><Minus className="size-4"/></Button>
