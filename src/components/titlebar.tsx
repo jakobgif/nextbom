@@ -53,7 +53,13 @@ export function Titlebar(){
                   }
                 }}>Save Project As</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem disabled>Open Project</MenubarItem>
+                <MenubarItem onClick={async () => {
+                  try {
+                    await invoke("open_project");
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>Open Project</MenubarItem>
                 <MenubarSub>
                   <MenubarSubTrigger>Open Recent</MenubarSubTrigger>
                   <MenubarSubContent>

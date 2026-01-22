@@ -74,6 +74,54 @@ pub fn close_project(app: AppHandle, state: State<AppState>) -> Result<(), Strin
     Ok(())
 }
 
+/// Opens a project from file using file picker
+#[tauri::command]
+pub fn open_project(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    // Show open file dialog
+    let file_path = app.dialog()
+        .file()
+        .set_title("Open project")
+        .add_filter("JSON", &["json"])
+        .blocking_pick_file();
+
+    // Check if user selected a file
+    let path = match file_path {
+        Some(p) => p.to_string(),
+        None => return Ok(()), // User cancelled
+    };
+
+    // Read file content
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Deserialize project
+    let project: Project = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse project file: {}", e))?;
+
+    // Update app state
+    let mut current = state.current_project.lock().unwrap();
+    *current = Some(project.clone());
+    drop(current);
+
+    let mut current_path = state.current_project_path.lock().unwrap();
+    *current_path = Some(path);
+    drop(current_path);
+
+    // Clear unsaved changes flag
+    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
+    *unsaved = false;
+    drop(unsaved);
+
+    // Emit event to notify frontend
+    app.emit("project-changed", ProjectState {
+        project: Some(project),
+        has_unsaved_changes: false,
+    })
+    .map_err(|e| format!("Failed to emit event: {}", e))?;
+
+    Ok(())
+}
+
 /// Saves the current project to file
 /// If save_as is true or no path exists, shows save dialog
 #[tauri::command]
@@ -156,3 +204,4 @@ pub fn save_project(app: AppHandle, state: State<AppState>, save_as: Option<bool
 
     Ok(())
 }
+

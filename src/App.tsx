@@ -14,6 +14,8 @@ import { Checkbox } from "./components/ui/checkbox";
 import { Project } from "./types/Project";
 import { NewProjectDialog } from "./components/new-project";
 import { ProjectState } from "./types/ProjectState";
+import { toast } from "sonner";
+import { invoke } from "@tauri-apps/api/core";
 
 function App() {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
@@ -45,7 +47,15 @@ function App() {
                 <NewProjectDialog trigger={
                   <Button>Create Project</Button>
                 } />
-                {/* <Button variant="outline">Open Project</Button> */}
+                <Button variant="outline" onClick={async () => {
+                  try {
+                    await invoke("open_project");
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>
+                  Open Project
+                </Button>
               </div>
               {/* <div className="flex flex-col items-start min-w-60 w-[30vw] pt-2">
                 <p className="text-lg font-medium pb-2">Recent</p>
