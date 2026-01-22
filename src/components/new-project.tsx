@@ -1,0 +1,111 @@
+import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+
+interface NewProjectDialogProps {
+  trigger: React.ReactNode;
+}
+
+export function NewProjectDialog({ trigger }: NewProjectDialogProps) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [engineer, setEngineer] = useState("");
+  const [projectSpecifics, setProjectSpecifics] = useState("");
+
+  const handleCreate = async () => {
+    if (!title.trim()) {
+      return;
+    }
+
+    try {
+      await invoke("create_project", {
+        title: title.trim(),
+        engineer: engineer.trim() || null,
+        project_specifics: projectSpecifics.trim() || null,
+      });
+      setOpen(false);
+    } catch (error) {
+      console.error("Failed to create project:", error);
+    }
+  };
+
+  const handleOpenChange = (open: boolean) => {
+    setOpen(open);
+    if (!open) {
+      setTitle("");
+      setEngineer("");
+      setProjectSpecifics("");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>
+        {trigger}
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create New Project</DialogTitle>
+          <DialogDescription>
+            Create a new project. Enter a project title to get started.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label>Project Title</Label>
+            <Input
+              id="project-title"
+              placeholder="complex_pcb_v1"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Engineer (Optional)</Label>
+            <Input
+              id="engineer"
+              placeholder="John Doe"
+              value={engineer}
+              onChange={(e) => setEngineer(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Project Specifics (Optional)</Label>
+            <Input
+              id="project-specifics"
+              placeholder="parts_2025"
+              value={projectSpecifics}
+              onChange={(e) => setProjectSpecifics(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => handleOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreate}
+            disabled={!title.trim()}
+          >
+            Create Project
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
