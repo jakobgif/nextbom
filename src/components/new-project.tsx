@@ -12,6 +12,7 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+import { toast } from "sonner";
 
 interface NewProjectDialogProps {
   trigger?: React.ReactNode;
@@ -41,8 +42,9 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
         project_specifics: projectSpecifics.trim() || null,
       });
       setOpen(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create project:", error);
+      toast.error(error.toString())
     }
   };
 
