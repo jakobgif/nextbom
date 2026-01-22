@@ -3,6 +3,18 @@ use crate::AppState;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::DialogExt;
 
+/// Gets the current project state
+#[tauri::command]
+pub fn get_project_state(state: State<AppState>) -> ProjectState {
+    let current = state.current_project.lock().unwrap();
+    let unsaved = state.project_has_unsaved_changes.lock().unwrap();
+
+    ProjectState {
+        project: current.clone(),
+        has_unsaved_changes: *unsaved,
+    }
+}
+
 /// Creates a new project
 #[tauri::command]
 pub fn create_project(
@@ -84,6 +96,9 @@ pub fn open_project(app: AppHandle, state: State<AppState>) -> Result<(), String
         .add_filter("JSON", &["json"])
         .blocking_pick_file();
 
+
+
+        
     // Check if user selected a file
     let path = match file_path {
         Some(p) => p.to_string(),

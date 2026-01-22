@@ -21,6 +21,11 @@ function App() {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
 
   useEffect(() => {
+    // Initialize project state on mount
+    invoke<ProjectState>("get_project_state").then((state) => {
+      setCurrentProject(state.project);
+    });
+
     // Listen for project changes from backend
     listen<ProjectState>("project-changed", (event) => {
       setCurrentProject(event.payload.project);
