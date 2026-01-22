@@ -9,15 +9,24 @@ import { Project } from "@/types/Project";
 import { ProjectState } from "@/types/ProjectState";
 import { NewProjectDialog } from "./new-project";
 import { toast } from "sonner";
+import { useTheme } from "./theme-provider";
+import { relaunch, exit } from "@tauri-apps/plugin-process";
 
 export function Titlebar(){
   const appWindow = getCurrentWindow();
+  const { theme, setTheme } = useTheme();
 
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentProjectUnsaved, setCurrentProjectUnsaved] = useState<boolean>(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
 
   useEffect(() => {
+    // Initialize project state on mount
+    invoke<ProjectState>("get_project_state").then((state) => {
+      setCurrentProject(state.project);
+      setCurrentProjectUnsaved(state.has_unsaved_changes);
+    });
+
     // Listen for project changes from backend
     listen<ProjectState>("project-changed", (event) => {
       setCurrentProject(event.payload.project);
@@ -69,10 +78,20 @@ export function Titlebar(){
                 <MenubarSeparator />
                 <MenubarItem disabled={!currentProject} onClick={() => invoke("close_project")}>Close Project</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem disabled>Toggle Theme</MenubarItem>
-                <MenubarSeparator />
-                <MenubarItem disabled>Restart</MenubarItem>
-                <MenubarItem disabled>Exit</MenubarItem>
+                <MenubarItem onClick={async () => {
+                  try {
+                    await relaunch();
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>Restart</MenubarItem>
+                <MenubarItem onClick={async () => {
+                  try {
+                    await exit(0);
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>Exit</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -108,6 +127,10 @@ export function Titlebar(){
                 <p>Help</p>
               </MenubarTrigger>
               <MenubarContent>
+                <MenubarItem inset onClick={() => {
+                  setTheme(theme === "dark" ? "light" : "dark");
+                }}>Toggle Theme</MenubarItem>
+                <MenubarSeparator />
                 <MenubarItem inset disabled>Report Issue</MenubarItem>
                 <MenubarSeparator />
                 <MenubarCheckboxItem disabled>Development Mode</MenubarCheckboxItem>
