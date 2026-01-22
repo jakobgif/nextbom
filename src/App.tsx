@@ -13,14 +13,15 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "./components/ui
 import { Checkbox } from "./components/ui/checkbox";
 import { Project } from "./types/Project";
 import { NewProjectDialog } from "./components/new-project";
+import { ProjectState } from "./types/ProjectState";
 
 function App() {
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
 
   useEffect(() => {
     // Listen for project changes from backend
-    listen<Project | null>("project-changed", (event) => {
-      setCurrentProject(event.payload);
+    listen<ProjectState>("project-changed", (event) => {
+      setCurrentProject(event.payload.project);
     });
   }, []);
 
@@ -76,7 +77,6 @@ function App() {
         )}
       </div>
       <div className="w-full flex items-center justify-center bg-primary min-h-[24px]">
-        <p>test</p>
       </div>
     </div>
   );
