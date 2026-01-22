@@ -3,6 +3,35 @@ use crate::AppState;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::DialogExt;
 
+/// Checks if the project schema version is compatible with the current application version
+fn check_schema_compatibility(file_schema: &str) -> Result<(), String> {
+    let current_version = env!("CARGO_PKG_VERSION");
+
+    // Parse major versions
+    let file_major = file_schema
+        .split('.')
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .ok_or_else(|| format!("Invalid schema version format: {}", file_schema))?;
+
+    let current_major = current_version
+        .split('.')
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .ok_or_else(|| format!("Invalid current version format: {}", current_version))?;
+
+    // Check major version compatibility
+    if file_major != current_major {
+        return Err(format!(
+            "Incompatible project file version: {} (current software version: {}). Please update the application or use a compatible project file.",
+            file_schema,
+            current_version
+        ));
+    }
+
+    Ok(())
+}
+
 /// Gets the current project state
 #[tauri::command]
 pub fn get_project_state(state: State<AppState>) -> ProjectState {
@@ -96,9 +125,6 @@ pub fn open_project(app: AppHandle, state: State<AppState>) -> Result<(), String
         .add_filter("JSON", &["json"])
         .blocking_pick_file();
 
-
-
-        
     // Check if user selected a file
     let path = match file_path {
         Some(p) => p.to_string(),
@@ -112,6 +138,9 @@ pub fn open_project(app: AppHandle, state: State<AppState>) -> Result<(), String
     // Deserialize project
     let project: Project = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse project file: {}", e))?;
+
+    // Check schema compatibility
+    check_schema_compatibility(&project.schema)?;
 
     // Update app state
     let mut current = state.current_project.lock().unwrap();
