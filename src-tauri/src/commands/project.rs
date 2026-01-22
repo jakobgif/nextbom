@@ -1,6 +1,7 @@
 use crate::data::Project;
 use crate::AppState;
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_dialog::DialogExt;
 
 /// Creates a new project
 #[tauri::command]
@@ -44,9 +45,79 @@ pub fn close_project(app: AppHandle, state: State<AppState>) -> Result<(), Strin
     let mut current = state.current_project.lock().unwrap();
     *current = None;
 
+    let mut current_path = state.current_project_path.lock().unwrap();
+    *current_path = None;
+
     // Emit event to notify frontend
     app.emit("project-changed", None::<Project>)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
+
+    Ok(())
+}
+
+/// Saves the current project to file
+/// If save_as is true or no path exists, shows save dialog
+#[tauri::command]
+pub fn save_project(app: AppHandle, state: State<AppState>, save_as: Option<bool>) -> Result<(), String> {
+    let save_as = save_as.unwrap_or(false);
+
+    // Check if we need to show the save dialog
+    let current_path_guard = state.current_project_path.lock().unwrap();
+    let needs_dialog = save_as || current_path_guard.is_none();
+    drop(current_path_guard);
+
+    let path = if needs_dialog {
+        // Get current project to determine default filename
+        let current = state.current_project.lock().unwrap();
+        let project = current.as_ref()
+            .ok_or_else(|| "No project currently open".to_string())?;
+
+        // Determine default filename from project title
+        let default_filename = project.title.as_ref()
+            .map(|t| format!("{}.json", t))
+            .unwrap_or_else(|| "untitled.json".to_string());
+
+        drop(current); // Release the lock before showing dialog
+
+        // Show save file dialog
+        let file_path = app.dialog()
+            .file()
+            .set_title("Save project as")
+            .set_file_name(&default_filename)
+            .add_filter("JSON", &["json"])
+            .blocking_save_file();
+
+        // Check if user selected a file
+        match file_path {
+            Some(p) => p.to_string(),
+            None => return Ok(()), // User cancelled
+        }
+    } else {
+        // Use existing path
+        let current_path = state.current_project_path.lock().unwrap();
+        current_path.as_ref()
+            .ok_or_else(|| "No file path set".to_string())?
+            .clone()
+    };
+
+    // Get current project for saving
+    let mut current = state.current_project.lock().unwrap();
+    let project = current.as_mut()
+        .ok_or_else(|| "No project currently open".to_string())?;
+
+    // Serialize to JSON with pretty formatting
+    let json = serde_json::to_string_pretty(project)
+        .map_err(|e| format!("Failed to serialize project: {}", e))?;
+
+    // Write to file
+    std::fs::write(&path, json)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+
+    drop(current); // Release project lock
+
+    // Update current project path in app state
+    let mut current_path = state.current_project_path.lock().unwrap();
+    *current_path = Some(path);
 
     Ok(())
 }

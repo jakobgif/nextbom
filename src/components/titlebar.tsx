@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Project } from "@/types/Project";
 import { NewProjectDialog } from "./new-project";
+import { toast } from "sonner";
 
 export function Titlebar(){
   const appWindow = getCurrentWindow();
@@ -32,8 +33,23 @@ export function Titlebar(){
                 <p>File</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarItem disabled>Save Project</MenubarItem>
                 <MenubarItem onClick={() => setNewProjectDialogOpen(true)}>New Project</MenubarItem>
+                <MenubarSeparator />
+                <MenubarItem disabled={!currentProject} onClick={async () => {
+                  try {
+                    await invoke("save_project");
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>Save Project</MenubarItem>
+                <MenubarItem disabled={!currentProject} onClick={async () => {
+                  try {
+                    await invoke("save_project", { saveAs: true });
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>Save Project As</MenubarItem>
+                <MenubarSeparator />
                 <MenubarItem disabled>Open Project</MenubarItem>
                 <MenubarSub>
                   <MenubarSubTrigger>Open Recent</MenubarSubTrigger>
@@ -41,6 +57,7 @@ export function Titlebar(){
                     <MenubarItem disabled>File</MenubarItem>
                   </MenubarSubContent>
                 </MenubarSub>
+                <MenubarSeparator />
                 <MenubarItem disabled={!currentProject} onClick={() => invoke("close_project")}>Close Project</MenubarItem>
                 <MenubarSeparator />
                 <MenubarItem disabled>Toggle Theme</MenubarItem>
