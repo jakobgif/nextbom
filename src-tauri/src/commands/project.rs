@@ -1,4 +1,4 @@
-use crate::data::Project;
+use crate::data::{Project, ProjectState};
 use crate::AppState;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_dialog::DialogExt;
@@ -31,10 +31,19 @@ pub fn create_project(
     // Update app state
     let mut current = state.current_project.lock().unwrap();
     *current = Some(project.clone());
+    drop(current);
+
+    // Set unsaved changes flag
+    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
+    *unsaved = true;
+    drop(unsaved);
 
     // Emit event to notify frontend
-    app.emit("project-changed", Some(project.clone()))
-        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", ProjectState {
+        project: Some(project),
+        has_unsaved_changes: true,
+    })
+    .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -44,13 +53,23 @@ pub fn create_project(
 pub fn close_project(app: AppHandle, state: State<AppState>) -> Result<(), String> {
     let mut current = state.current_project.lock().unwrap();
     *current = None;
+    drop(current);
 
     let mut current_path = state.current_project_path.lock().unwrap();
     *current_path = None;
+    drop(current_path);
+
+    // Clear unsaved changes flag
+    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
+    *unsaved = false;
+    drop(unsaved);
 
     // Emit event to notify frontend
-    app.emit("project-changed", None::<Project>)
-        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", ProjectState {
+        project: None,
+        has_unsaved_changes: false,
+    })
+    .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -118,6 +137,22 @@ pub fn save_project(app: AppHandle, state: State<AppState>, save_as: Option<bool
     // Update current project path in app state
     let mut current_path = state.current_project_path.lock().unwrap();
     *current_path = Some(path);
+    drop(current_path);
+
+    // Clear unsaved changes flag
+    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
+    *unsaved = false;
+    drop(unsaved);
+
+    // Emit event to notify frontend of the updated project
+    let current = state.current_project.lock().unwrap();
+    if let Some(project) = current.as_ref() {
+        app.emit("project-changed", ProjectState {
+            project: Some(project.clone()),
+            has_unsaved_changes: false,
+        })
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    }
 
     Ok(())
 }

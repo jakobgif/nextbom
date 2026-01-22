@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Project } from "@/types/Project";
+import { ProjectState } from "@/types/ProjectState";
 import { NewProjectDialog } from "./new-project";
 import { toast } from "sonner";
 
@@ -13,12 +14,14 @@ export function Titlebar(){
   const appWindow = getCurrentWindow();
 
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [currentProjectUnsaved, setCurrentProjectUnsaved] = useState<boolean>(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
 
   useEffect(() => {
     // Listen for project changes from backend
-    listen<Project | null>("project-changed", (event) => {
-      setCurrentProject(event.payload);
+    listen<ProjectState>("project-changed", (event) => {
+      setCurrentProject(event.payload.project);
+      setCurrentProjectUnsaved(event.payload.has_unsaved_changes);
     });
   }, []);
 
@@ -109,7 +112,10 @@ export function Titlebar(){
           </Menubar>
           </div>
         <div className="absolute left-1/2 -translate-x-1/2">
-          <p className="text-muted-foreground text-sm">{currentProject?.title}</p>
+          <p className="text-muted-foreground text-sm">
+            {currentProjectUnsaved && "(unsaved) "}
+            {currentProject?.title}
+          </p>
         </div>
         <div className="ml-auto flex flex-row">
           <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.minimize()}><Minus className="size-4"/></Button>
