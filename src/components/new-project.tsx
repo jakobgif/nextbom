@@ -14,14 +14,20 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
 interface NewProjectDialogProps {
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function NewProjectDialog({ trigger }: NewProjectDialogProps) {
-  const [open, setOpen] = useState(false);
+export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }: NewProjectDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [engineer, setEngineer] = useState("");
   const [projectSpecifics, setProjectSpecifics] = useState("");
+
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? onOpenChange! : setInternalOpen;
 
   const handleCreate = async () => {
     if (!title.trim()) {
@@ -51,9 +57,11 @@ export function NewProjectDialog({ trigger }: NewProjectDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        {trigger}
-      </DialogTrigger>
+      {trigger && (
+        <DialogTrigger asChild>
+          {trigger}
+        </DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create New Project</DialogTitle>
