@@ -7,11 +7,25 @@ use tauri::{AppHandle, Emitter, State};
 pub fn create_project(
     app: AppHandle,
     title: String,
+    engineer: Option<String>,
+    project_specifics: Option<String>,
     state: State<AppState>,
 ) -> Result<(), String> {
     // Create new project
     let mut project = Project::new();
-    project.title = Some(title);
+    project.set_title(title);
+
+    if let Some(eng) = engineer {
+        if !eng.is_empty() {
+            project.set_engineer(eng);
+        }
+    }
+
+    if let Some(specs) = project_specifics {
+        if !specs.is_empty() {
+            project.set_project_specifics(specs);
+        }
+    }
 
     // Update app state
     let mut current = state.current_project.lock().unwrap();
