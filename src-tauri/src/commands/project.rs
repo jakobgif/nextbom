@@ -122,13 +122,16 @@ pub fn close_project(app: AppHandle, state: State<AppState>) -> Result<(), Strin
 
 /// Opens a project from file using file picker
 #[tauri::command]
-pub fn open_project(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-    // Show open file dialog
-    let file_path = app.dialog()
+pub async fn open_project(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    // Show open file dialog (run in background thread to avoid blocking UI)
+    let dialog = app.dialog()
         .file()
         .set_title("Open project")
-        .add_filter("JSON", &["json"])
-        .blocking_pick_file();
+        .add_filter("JSON", &["json"]);
+
+    let file_path = tauri::async_runtime::spawn_blocking(move || {
+        dialog.blocking_pick_file()
+    }).await.map_err(|e| e.to_string())?;
 
     // Check if user selected a file
     let path = match file_path {
@@ -174,34 +177,41 @@ pub fn open_project(app: AppHandle, state: State<AppState>) -> Result<(), String
 /// Saves the current project to file
 /// If save_as is true or no path exists, shows save dialog
 #[tauri::command]
-pub fn save_project(app: AppHandle, state: State<AppState>, save_as: Option<bool>) -> Result<(), String> {
+pub async fn save_project(app: AppHandle, state: State<'_, AppState>, save_as: Option<bool>) -> Result<(), String> {
     let save_as = save_as.unwrap_or(false);
 
-    // Check if we need to show the save dialog
-    let current_path_guard = state.current_project_path.lock().unwrap();
-    let needs_dialog = save_as || current_path_guard.is_none();
-    drop(current_path_guard);
+    // Check if we need to show the save dialog and get default filename
+    // Use scoping blocks to ensure MutexGuards are dropped before await
+    let (needs_dialog, default_filename, existing_path) = {
+        let current_path_guard = state.current_project_path.lock().unwrap();
+        let needs = save_as || current_path_guard.is_none();
+        let existing = current_path_guard.clone();
+
+        let filename = if needs {
+            let current = state.current_project.lock().unwrap();
+            current.as_ref()
+                .ok_or_else(|| "No project currently open".to_string())?
+                .title.as_ref()
+                .map(|t| format!("{}.json", t))
+                .unwrap_or_else(|| "untitled.json".to_string())
+        } else {
+            String::new()
+        };
+
+        (needs, filename, existing)
+    };
 
     let path = if needs_dialog {
-        // Get current project to determine default filename
-        let current = state.current_project.lock().unwrap();
-        let project = current.as_ref()
-            .ok_or_else(|| "No project currently open".to_string())?;
-
-        // Determine default filename from project title
-        let default_filename = project.title.as_ref()
-            .map(|t| format!("{}.json", t))
-            .unwrap_or_else(|| "untitled.json".to_string());
-
-        drop(current); // Release the lock before showing dialog
-
-        // Show save file dialog
-        let file_path = app.dialog()
+        // Show save file dialog (run in background thread to avoid blocking UI)
+        let dialog = app.dialog()
             .file()
             .set_title("Save project as")
             .set_file_name(&default_filename)
-            .add_filter("JSON", &["json"])
-            .blocking_save_file();
+            .add_filter("JSON", &["json"]);
+
+        let file_path = tauri::async_runtime::spawn_blocking(move || {
+            dialog.blocking_save_file()
+        }).await.map_err(|e| e.to_string())?;
 
         // Check if user selected a file
         match file_path {
@@ -210,10 +220,7 @@ pub fn save_project(app: AppHandle, state: State<AppState>, save_as: Option<bool
         }
     } else {
         // Use existing path
-        let current_path = state.current_project_path.lock().unwrap();
-        current_path.as_ref()
-            .ok_or_else(|| "No file path set".to_string())?
-            .clone()
+        existing_path.ok_or_else(|| "No file path set".to_string())?
     };
 
     // Get current project for saving
@@ -337,13 +344,16 @@ pub fn set_project_specifics(app: AppHandle, project_specifics: String, state: S
 
 /// Sets the database path of the current project using a file dialog
 #[tauri::command]
-pub fn set_database_path(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-    // Show open file dialog
-    let file_path = app.dialog()
+pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    // Show open file dialog (run in background thread to avoid blocking UI)
+    let dialog = app.dialog()
         .file()
         .set_title("Select NextBOM Database File")
-        .add_filter("NextBOM Database", &["nextbom"])
-        .blocking_pick_file();
+        .add_filter("NextBOM Database", &["nextbom"]);
+
+    let file_path = tauri::async_runtime::spawn_blocking(move || {
+        dialog.blocking_pick_file()
+    }).await.map_err(|e| e.to_string())?;
 
     // Check if user selected a file
     let path = match file_path {
