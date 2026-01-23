@@ -38,6 +38,22 @@ export function Titlebar(){
     });
   }, []);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        if (!currentProject) return;
+        invoke("save_project").catch((error: any) => {
+          toast.error(error.toString());
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [currentProject]);
+
   return (
     <>
       <div className="flex flex-row items-center bg-card select-none shadow-2xl z-50" data-tauri-drag-region>
@@ -57,7 +73,7 @@ export function Titlebar(){
                   } catch (error: any) {
                     toast.error(error.toString());
                   }
-                }}>Save Project</MenubarItem>
+                }}>Save Project<MenubarShortcut>Ctrl+S</MenubarShortcut></MenubarItem>
                 <MenubarItem disabled={!currentProject} onClick={async () => {
                   try {
                     await invoke("save_project", { saveAs: true });
