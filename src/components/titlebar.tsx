@@ -20,8 +20,9 @@ export function Titlebar(){
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentProjectUnsaved, setCurrentProjectUnsaved] = useState<boolean>(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
-  const [setTitleDialogOpen, setSetTitleDialogOpen] = useState(false);
-  const [setEngineerDialogOpen, setSetEngineerDialogOpen] = useState(false);
+  const [titleDialogOpen, setTitleDialogOpen] = useState(false);
+  const [engineerDialogOpen, setEngineerDialogOpen] = useState(false);
+  const [projectSpecificsDialogOpen, setProjectSpecificsDialogOpen] = useState(false);
 
   useEffect(() => {
     // Initialize project state on mount
@@ -102,11 +103,11 @@ export function Titlebar(){
                 <p>Edit</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarItem disabled={!currentProject} onSelect={() => setSetTitleDialogOpen(true)}>Set Title</MenubarItem>
-                <MenubarItem disabled={!currentProject} onSelect={() => setSetEngineerDialogOpen(true)}>Set Engineer</MenubarItem>
+                <MenubarItem disabled={!currentProject} onSelect={() => setTitleDialogOpen(true)}>Set Title</MenubarItem>
+                <MenubarItem disabled={!currentProject} onSelect={() => setEngineerDialogOpen(true)}>Set Engineer</MenubarItem>
                 <MenubarSeparator />
                 <MenubarItem disabled={!currentProject}>Select Database</MenubarItem>
-                <MenubarItem disabled={!currentProject}>Set Project Specifics</MenubarItem>
+                <MenubarItem disabled={!currentProject} onSelect={() => setProjectSpecificsDialogOpen(true)}>Set Project Specifics</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -141,8 +142,8 @@ export function Titlebar(){
       </div>
       <NewProjectDialog open={newProjectDialogOpen} onOpenChange={setNewProjectDialogOpen} />
       <SetStringDialog
-        open={setTitleDialogOpen}
-        onOpenChange={setSetTitleDialogOpen}
+        open={titleDialogOpen}
+        onOpenChange={setTitleDialogOpen}
         title="Set Project Title"
         description="Enter a new title for your project."
         label="Title"
@@ -151,15 +152,15 @@ export function Titlebar(){
         onSubmit={async (value) => {
           try {
             await invoke("set_project_title", { title: value });
-            setSetTitleDialogOpen(false);
+            setTitleDialogOpen(false);
           } catch (error: any) {
             toast.error(error.toString());
           }
         }}
       />
       <SetStringDialog
-        open={setEngineerDialogOpen}
-        onOpenChange={setSetEngineerDialogOpen}
+        open={engineerDialogOpen}
+        onOpenChange={setEngineerDialogOpen}
         title="Set Project Engineer"
         description="Enter the name of the engineer working on the project."
         label="Engineer"
@@ -168,7 +169,24 @@ export function Titlebar(){
         onSubmit={async (value) => {
           try {
             await invoke("set_project_engineer", { engineer: value });
-            setSetEngineerDialogOpen(false);
+            setEngineerDialogOpen(false);
+          } catch (error: any) {
+            toast.error(error.toString());
+          }
+        }}
+      />
+      <SetStringDialog
+        open={projectSpecificsDialogOpen}
+        onOpenChange={setProjectSpecificsDialogOpen}
+        title="Set Project Specifics"
+        description="Enter the identifier of the project specific parts to use for this project."
+        label="Project Specifics"
+        placeholder="Enter identifier"
+        currentValue={currentProject?.project_specifics || ""}
+        onSubmit={async (value) => {
+          try {
+            await invoke("set_project_specifics", { projectSpecifics: value });
+            setProjectSpecificsDialogOpen(false);
           } catch (error: any) {
             toast.error(error.toString());
           }
