@@ -122,7 +122,13 @@ export function Titlebar(){
                 <MenubarItem disabled={!currentProject} onSelect={() => setTitleDialogOpen(true)}>Set Title</MenubarItem>
                 <MenubarItem disabled={!currentProject} onSelect={() => setEngineerDialogOpen(true)}>Set Engineer</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem disabled={!currentProject}>Select Database</MenubarItem>
+                <MenubarItem disabled={!currentProject} onClick={async () => {
+                  try {
+                    await invoke("set_database_path");
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>Select Database</MenubarItem>
                 <MenubarItem disabled={!currentProject} onSelect={() => setProjectSpecificsDialogOpen(true)}>Set Project Specifics</MenubarItem>
               </MenubarContent>
             </MenubarMenu>

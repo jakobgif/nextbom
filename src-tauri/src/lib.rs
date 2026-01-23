@@ -31,6 +31,7 @@ pub fn run() {
             commands::set_project_title,
             commands::set_project_engineer,
             commands::set_project_specifics,
+            commands::set_database_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

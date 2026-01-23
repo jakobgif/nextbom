@@ -335,3 +335,42 @@ pub fn set_project_specifics(app: AppHandle, project_specifics: String, state: S
     Ok(())
 }
 
+/// Sets the database path of the current project using a file dialog
+#[tauri::command]
+pub fn set_database_path(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    // Show open file dialog
+    let file_path = app.dialog()
+        .file()
+        .set_title("Select NextBOM Database File")
+        .add_filter("NextBOM Database", &["nextbom"])
+        .blocking_pick_file();
+
+    // Check if user selected a file
+    let path = match file_path {
+        Some(p) => p.to_string(),
+        None => return Ok(()), // User cancelled
+    };
+
+    // Get and update current project
+    let mut current = state.current_project.lock().unwrap();
+    let project = current.as_mut()
+        .ok_or_else(|| "No project currently open".to_string())?;
+
+    project.set_database_path(path);
+    let updated_project = project.clone();
+    drop(current);
+
+    // Set unsaved changes flag
+    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
+    *unsaved = true;
+    drop(unsaved);
+
+    // Emit event to notify frontend
+    app.emit("project-changed", ProjectState {
+        project: Some(updated_project),
+        has_unsaved_changes: true,
+    })
+    .map_err(|e| format!("Failed to emit event: {}", e))?;
+
+    Ok(())
+}
