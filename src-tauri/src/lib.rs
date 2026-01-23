@@ -28,6 +28,7 @@ pub fn run() {
             commands::close_project,
             commands::open_project,
             commands::save_project,
+            commands::set_project_title,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

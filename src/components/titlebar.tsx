@@ -11,6 +11,7 @@ import { NewProjectDialog } from "./new-project";
 import { toast } from "sonner";
 import { useTheme } from "./theme-provider";
 import { relaunch, exit } from "@tauri-apps/plugin-process";
+import { SetStringDialog } from "./set-string-dialog";
 
 export function Titlebar(){
   const appWindow = getCurrentWindow();
@@ -19,6 +20,7 @@ export function Titlebar(){
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [currentProjectUnsaved, setCurrentProjectUnsaved] = useState<boolean>(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+  const [setTitleDialogOpen, setSetTitleDialogOpen] = useState(false);
 
   useEffect(() => {
     // Initialize project state on mount
@@ -99,27 +101,11 @@ export function Titlebar(){
                 <p>Edit</p>
               </MenubarTrigger>
               <MenubarContent>
-                {/* <MenubarItem>
-                  Undo <MenubarShortcut>⌘Z</MenubarShortcut>
-                </MenubarItem>
-                <MenubarItem>
-                  Redo <MenubarShortcut>⇧⌘Z</MenubarShortcut>
-                </MenubarItem>
+                <MenubarItem disabled={!currentProject} onSelect={() => setSetTitleDialogOpen(true)}>Set Title</MenubarItem>
+                <MenubarItem disabled={!currentProject}>Set Engineer</MenubarItem>
                 <MenubarSeparator />
-                <MenubarSub>
-                  <MenubarSubTrigger>Find</MenubarSubTrigger>
-                  <MenubarSubContent>
-                    <MenubarItem>Search the web</MenubarItem>
-                    <MenubarSeparator />
-                    <MenubarItem>Find...</MenubarItem>
-                    <MenubarItem>Find Next</MenubarItem>
-                    <MenubarItem>Find Previous</MenubarItem>
-                  </MenubarSubContent>
-                </MenubarSub>
-                <MenubarSeparator />
-                <MenubarItem>Cut</MenubarItem>
-                <MenubarItem>Copy</MenubarItem>
-                <MenubarItem>Paste</MenubarItem> */}
+                <MenubarItem disabled={!currentProject}>Select Database</MenubarItem>
+                <MenubarItem disabled={!currentProject}>Set Project Specifics</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -127,7 +113,7 @@ export function Titlebar(){
                 <p>Help</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarItem inset onClick={() => {
+                <MenubarItem onClick={() => {
                   setTheme(theme === "dark" ? "light" : "dark");
                 }}>Toggle Theme</MenubarItem>
                 {/* <MenubarSeparator />
@@ -153,6 +139,23 @@ export function Titlebar(){
         </div>
       </div>
       <NewProjectDialog open={newProjectDialogOpen} onOpenChange={setNewProjectDialogOpen} />
+      <SetStringDialog
+        open={setTitleDialogOpen}
+        onOpenChange={setSetTitleDialogOpen}
+        title="Set Project Title"
+        description="Enter a new title for your project."
+        label="Title"
+        placeholder="Enter project title"
+        currentValue={currentProject?.title || ""}
+        onSubmit={async (value) => {
+          try {
+            await invoke("set_project_title", { title: value });
+            setSetTitleDialogOpen(false);
+          } catch (error: any) {
+            toast.error(error.toString());
+          }
+        }}
+      />
     </>
   )
 }
