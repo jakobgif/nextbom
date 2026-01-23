@@ -74,6 +74,11 @@ pub fn create_project(
     *current = Some(project.clone());
     drop(current);
 
+    // Clear project path (new project has no file location yet)
+    let mut current_path = state.current_project_path.lock().unwrap();
+    *current_path = None;
+    drop(current_path);
+
     // Set unsaved changes flag
     let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
     *unsaved = true;
