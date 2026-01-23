@@ -90,7 +90,7 @@ export function Titlebar(){
                   }
                 }}>Open Project</MenubarItem>
                 <MenubarSub>
-                  <MenubarSubTrigger>Open Recent</MenubarSubTrigger>
+                  {/* <MenubarSubTrigger>Open Recent</MenubarSubTrigger> */}
                   <MenubarSubContent>
                     <MenubarItem disabled>File</MenubarItem>
                   </MenubarSubContent>
