@@ -1,0 +1,16 @@
+site_name: nextbom
+site_url: https://jakobgif.github.io/nextbom/
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+
+nav:
+  - Home: index.md
+  - Project: project.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/jakobgif/nextbom
