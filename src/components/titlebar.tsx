@@ -21,6 +21,7 @@ export function Titlebar(){
   const [currentProjectUnsaved, setCurrentProjectUnsaved] = useState<boolean>(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [setTitleDialogOpen, setSetTitleDialogOpen] = useState(false);
+  const [setEngineerDialogOpen, setSetEngineerDialogOpen] = useState(false);
 
   useEffect(() => {
     // Initialize project state on mount
@@ -102,7 +103,7 @@ export function Titlebar(){
               </MenubarTrigger>
               <MenubarContent>
                 <MenubarItem disabled={!currentProject} onSelect={() => setSetTitleDialogOpen(true)}>Set Title</MenubarItem>
-                <MenubarItem disabled={!currentProject}>Set Engineer</MenubarItem>
+                <MenubarItem disabled={!currentProject} onSelect={() => setSetEngineerDialogOpen(true)}>Set Engineer</MenubarItem>
                 <MenubarSeparator />
                 <MenubarItem disabled={!currentProject}>Select Database</MenubarItem>
                 <MenubarItem disabled={!currentProject}>Set Project Specifics</MenubarItem>
@@ -151,6 +152,23 @@ export function Titlebar(){
           try {
             await invoke("set_project_title", { title: value });
             setSetTitleDialogOpen(false);
+          } catch (error: any) {
+            toast.error(error.toString());
+          }
+        }}
+      />
+      <SetStringDialog
+        open={setEngineerDialogOpen}
+        onOpenChange={setSetEngineerDialogOpen}
+        title="Set Project Engineer"
+        description="Enter the name of the engineer working on the project."
+        label="Engineer"
+        placeholder="Enter engineer name"
+        currentValue={currentProject?.engineer || ""}
+        onSubmit={async (value) => {
+          try {
+            await invoke("set_project_engineer", { engineer: value });
+            setSetEngineerDialogOpen(false);
           } catch (error: any) {
             toast.error(error.toString());
           }

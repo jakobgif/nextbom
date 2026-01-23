@@ -29,6 +29,7 @@ pub fn run() {
             commands::open_project,
             commands::save_project,
             commands::set_project_title,
+            commands::set_project_engineer,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

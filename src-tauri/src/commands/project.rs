@@ -275,3 +275,31 @@ pub fn set_project_title(app: AppHandle, title: String, state: State<AppState>) 
 
     Ok(())
 }
+
+/// Sets the engineer name of the current project
+#[tauri::command]
+pub fn set_project_engineer(app: AppHandle, engineer: String, state: State<AppState>) -> Result<(), String> {
+    // Get and update current project
+    let mut current = state.current_project.lock().unwrap();
+    let project = current.as_mut()
+        .ok_or_else(|| "No project currently open".to_string())?;
+
+    project.set_engineer(engineer);
+    let updated_project = project.clone();
+    drop(current);
+
+    // Set unsaved changes flag
+    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
+    *unsaved = true;
+    drop(unsaved);
+
+    // Emit event to notify frontend
+    app.emit("project-changed", ProjectState {
+        project: Some(updated_project),
+        has_unsaved_changes: true,
+    })
+    .map_err(|e| format!("Failed to emit event: {}", e))?;
+
+    Ok(())
+}
+
