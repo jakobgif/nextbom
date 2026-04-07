@@ -1,11 +1,17 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Payload for project-changed events
+/// Payload emitted with every `project-changed` event and returned by `get_project_state`.
+///
+/// Both `App.tsx` and `Titlebar` subscribe to this independently — there is no shared React
+/// context; each component keeps its own copy.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/types/ProjectState.ts")]
 pub struct ProjectState {
+    /// The currently open project, or `None` when no project is loaded.
     pub project: Option<Project>,
+
+    /// `true` when the in-memory project has changes that have not yet been written to disk.
     pub has_unsaved_changes: bool,
 }
 
