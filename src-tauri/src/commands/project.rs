@@ -13,7 +13,6 @@ use tauri_plugin_dialog::DialogExt;
 fn check_schema_compatibility(file_schema: &str) -> Result<(), String> {
     let current_version = env!("CARGO_PKG_VERSION");
 
-    // Parse major versions
     let file_major = file_schema
         .split('.')
         .next()
@@ -26,7 +25,6 @@ fn check_schema_compatibility(file_schema: &str) -> Result<(), String> {
         .and_then(|v| v.parse::<u32>().ok())
         .ok_or_else(|| format!("Invalid current version format: {}", current_version))?;
 
-    // Check major version compatibility
     if file_major != current_major {
         return Err(format!(
             "Incompatible project file version: {} (current software version: {}). Please update the application or use a compatible project file.",
@@ -44,12 +42,10 @@ fn check_schema_compatibility(file_schema: &str) -> Result<(), String> {
 /// `project-changed` event arrives.
 #[tauri::command]
 pub fn get_project_state(state: State<AppState>) -> ProjectState {
-    let current = state.current_project.lock().unwrap();
-    let unsaved = state.project_has_unsaved_changes.lock().unwrap();
-
+    let inner = state.inner.lock().unwrap();
     ProjectState {
-        project: current.clone(),
-        has_unsaved_changes: *unsaved,
+        project: inner.current_project.clone(),
+        has_unsaved_changes: inner.has_unsaved_changes,
     }
 }
 
@@ -66,7 +62,6 @@ pub fn create_project(
     project_specifics: Option<String>,
     state: State<AppState>,
 ) -> Result<(), String> {
-    // Create new project
     let mut project = Project::new();
     project.set_title(title);
 
@@ -82,27 +77,15 @@ pub fn create_project(
         }
     }
 
-    // Update app state
-    let mut current = state.current_project.lock().unwrap();
-    *current = Some(project.clone());
-    drop(current);
+    let mut inner = state.inner.lock().unwrap();
+    inner.current_project = Some(project.clone());
+    inner.current_project_path = None;
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project), has_unsaved_changes: true };
+    drop(inner);
 
-    // Clear project path (new project has no file location yet)
-    let mut current_path = state.current_project_path.lock().unwrap();
-    *current_path = None;
-    drop(current_path);
-
-    // Set unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = true;
-    drop(unsaved);
-
-    // Emit event to notify frontend
-    app.emit("project-changed", ProjectState {
-        project: Some(project),
-        has_unsaved_changes: true,
-    })
-    .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -113,83 +96,57 @@ pub fn create_project(
 /// responsible for prompting the user to save before invoking this command.
 #[tauri::command]
 pub fn close_project(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-    let mut current = state.current_project.lock().unwrap();
-    *current = None;
-    drop(current);
+    let mut inner = state.inner.lock().unwrap();
+    inner.current_project = None;
+    inner.current_project_path = None;
+    inner.has_unsaved_changes = false;
+    let snapshot = ProjectState { project: None, has_unsaved_changes: false };
+    drop(inner);
 
-    let mut current_path = state.current_project_path.lock().unwrap();
-    *current_path = None;
-    drop(current_path);
-
-    // Clear unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = false;
-    drop(unsaved);
-
-    // Emit event to notify frontend
-    app.emit("project-changed", ProjectState {
-        project: None,
-        has_unsaved_changes: false,
-    })
-    .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
 
-/// Presents a file-open dialog and loads the selected `.json` project file.
+/// Presents a file-open dialog and loads the selected `.nbp` project file.
 ///
 /// Returns `Ok(())` without changing state if the user cancels the dialog. Validates schema
 /// compatibility before accepting the file. On success, replaces the active project and emits
 /// `project-changed` with `has_unsaved_changes: false`.
 #[tauri::command]
 pub async fn open_project(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    // Show open file dialog (run in background thread to avoid blocking UI)
     let dialog = app.dialog()
         .file()
         .set_title("Open project")
-        .add_filter("JSON", &["json"]);
+        .add_filter("NextBOM Project", &["nbp"]);
 
     let file_path = tauri::async_runtime::spawn_blocking(move || {
         dialog.blocking_pick_file()
     }).await.map_err(|e| e.to_string())?;
 
-    // Check if user selected a file
     let path = match file_path {
         Some(p) => p.to_string(),
-        None => return Ok(()), // User cancelled
+        None => return Ok(()),
     };
 
-    // Read file content
     let content = std::fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // Deserialize project
     let project: Project = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse project file: {}", e))?;
 
-    // Check schema compatibility
     check_schema_compatibility(&project.schema)?;
 
-    // Update app state
-    let mut current = state.current_project.lock().unwrap();
-    *current = Some(project.clone());
-    drop(current);
+    let mut inner = state.inner.lock().unwrap();
+    inner.current_project = Some(project.clone());
+    inner.current_project_path = Some(path);
+    inner.has_unsaved_changes = false;
+    let snapshot = ProjectState { project: Some(project), has_unsaved_changes: false };
+    drop(inner);
 
-    let mut current_path = state.current_project_path.lock().unwrap();
-    *current_path = Some(path);
-    drop(current_path);
-
-    // Clear unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = false;
-    drop(unsaved);
-
-    // Emit event to notify frontend
-    app.emit("project-changed", ProjectState {
-        project: Some(project),
-        has_unsaved_changes: false,
-    })
-    .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -204,83 +161,65 @@ pub async fn open_project(app: AppHandle, state: State<'_, AppState>) -> Result<
 pub async fn save_project(app: AppHandle, state: State<'_, AppState>, save_as: Option<bool>) -> Result<(), String> {
     let save_as = save_as.unwrap_or(false);
 
-    // Check if we need to show the save dialog and get default filename
-    // Use scoping blocks to ensure MutexGuards are dropped before await
+    // Read necessary info before the dialog await point
     let (needs_dialog, default_filename, existing_path) = {
-        let current_path_guard = state.current_project_path.lock().unwrap();
-        let needs = save_as || current_path_guard.is_none();
-        let existing = current_path_guard.clone();
-
+        let inner = state.inner.lock().unwrap();
+        let needs = save_as || inner.current_project_path.is_none();
+        let existing = inner.current_project_path.clone();
         let filename = if needs {
-            let current = state.current_project.lock().unwrap();
-            current.as_ref()
+            inner.current_project.as_ref()
                 .ok_or_else(|| "No project currently open".to_string())?
                 .title.as_ref()
-                .map(|t| format!("{}.json", t))
-                .unwrap_or_else(|| "untitled.json".to_string())
+                .map(|t| format!("{}.nbp", t))
+                .unwrap_or_else(|| "untitled.nbp".to_string())
         } else {
             String::new()
         };
-
         (needs, filename, existing)
     };
 
     let path = if needs_dialog {
-        // Show save file dialog (run in background thread to avoid blocking UI)
         let dialog = app.dialog()
             .file()
             .set_title("Save project as")
             .set_file_name(&default_filename)
-            .add_filter("JSON", &["json"]);
+            .add_filter("NextBOM Project", &["nbp"]);
 
         let file_path = tauri::async_runtime::spawn_blocking(move || {
             dialog.blocking_save_file()
         }).await.map_err(|e| e.to_string())?;
 
-        // Check if user selected a file
         match file_path {
             Some(p) => p.to_string(),
-            None => return Ok(()), // User cancelled
+            None => return Ok(()),
         }
     } else {
-        // Use existing path
         existing_path.ok_or_else(|| "No file path set".to_string())?
     };
 
-    // Get current project for saving
-    let mut current = state.current_project.lock().unwrap();
-    let project = current.as_mut()
-        .ok_or_else(|| "No project currently open".to_string())?;
+    // Serialize while holding the lock briefly
+    let json = {
+        let inner = state.inner.lock().unwrap();
+        let project = inner.current_project.as_ref()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        serde_json::to_string_pretty(project)
+            .map_err(|e| format!("Failed to serialize project: {}", e))?
+    };
 
-    // Serialize to JSON with pretty formatting
-    let json = serde_json::to_string_pretty(project)
-        .map_err(|e| format!("Failed to serialize project: {}", e))?;
-
-    // Write to file
     std::fs::write(&path, json)
         .map_err(|e| format!("Failed to write file: {}", e))?;
 
-    drop(current); // Release project lock
+    let mut inner = state.inner.lock().unwrap();
+    inner.current_project_path = Some(path);
+    inner.has_unsaved_changes = false;
+    let snapshot = ProjectState {
+        project: inner.current_project.clone(),
+        has_unsaved_changes: false,
+    };
+    drop(inner);
 
-    // Update current project path in app state
-    let mut current_path = state.current_project_path.lock().unwrap();
-    *current_path = Some(path);
-    drop(current_path);
-
-    // Clear unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = false;
-    drop(unsaved);
-
-    // Emit event to notify frontend of the updated project
-    let current = state.current_project.lock().unwrap();
-    if let Some(project) = current.as_ref() {
-        app.emit("project-changed", ProjectState {
-            project: Some(project.clone()),
-            has_unsaved_changes: false,
-        })
+    app.emit("project-changed", snapshot)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
-    }
 
     Ok(())
 }
@@ -290,26 +229,16 @@ pub async fn save_project(app: AppHandle, state: State<'_, AppState>, save_as: O
 /// Returns an error if no project is currently open.
 #[tauri::command]
 pub fn set_project_title(app: AppHandle, title: String, state: State<AppState>) -> Result<(), String> {
-    // Get and update current project
-    let mut current = state.current_project.lock().unwrap();
-    let project = current.as_mut()
+    let mut inner = state.inner.lock().unwrap();
+    let project = inner.current_project.as_mut()
         .ok_or_else(|| "No project currently open".to_string())?;
-
     project.set_title(title);
-    let updated_project = project.clone();
-    drop(current);
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    drop(inner);
 
-    // Set unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = true;
-    drop(unsaved);
-
-    // Emit event to notify frontend
-    app.emit("project-changed", ProjectState {
-        project: Some(updated_project),
-        has_unsaved_changes: true,
-    })
-    .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -319,26 +248,16 @@ pub fn set_project_title(app: AppHandle, title: String, state: State<AppState>) 
 /// Returns an error if no project is currently open.
 #[tauri::command]
 pub fn set_project_engineer(app: AppHandle, engineer: String, state: State<AppState>) -> Result<(), String> {
-    // Get and update current project
-    let mut current = state.current_project.lock().unwrap();
-    let project = current.as_mut()
+    let mut inner = state.inner.lock().unwrap();
+    let project = inner.current_project.as_mut()
         .ok_or_else(|| "No project currently open".to_string())?;
-
     project.set_engineer(engineer);
-    let updated_project = project.clone();
-    drop(current);
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    drop(inner);
 
-    // Set unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = true;
-    drop(unsaved);
-
-    // Emit event to notify frontend
-    app.emit("project-changed", ProjectState {
-        project: Some(updated_project),
-        has_unsaved_changes: true,
-    })
-    .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -349,26 +268,16 @@ pub fn set_project_engineer(app: AppHandle, engineer: String, state: State<AppSt
 /// Returns an error if no project is currently open.
 #[tauri::command]
 pub fn set_project_specifics(app: AppHandle, project_specifics: String, state: State<AppState>) -> Result<(), String> {
-    // Get and update current project
-    let mut current = state.current_project.lock().unwrap();
-    let project = current.as_mut()
+    let mut inner = state.inner.lock().unwrap();
+    let project = inner.current_project.as_mut()
         .ok_or_else(|| "No project currently open".to_string())?;
-
     project.set_project_specifics(project_specifics);
-    let updated_project = project.clone();
-    drop(current);
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    drop(inner);
 
-    // Set unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = true;
-    drop(unsaved);
-
-    // Emit event to notify frontend
-    app.emit("project-changed", ProjectState {
-        project: Some(updated_project),
-        has_unsaved_changes: true,
-    })
-    .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -379,7 +288,6 @@ pub fn set_project_specifics(app: AppHandle, project_specifics: String, state: S
 /// and emits `project-changed` on success. Returns an error if no project is currently open.
 #[tauri::command]
 pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    // Show open file dialog (run in background thread to avoid blocking UI)
     let dialog = app.dialog()
         .file()
         .set_title("Select NextBOM Database File")
@@ -389,32 +297,21 @@ pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Re
         dialog.blocking_pick_file()
     }).await.map_err(|e| e.to_string())?;
 
-    // Check if user selected a file
     let path = match file_path {
         Some(p) => p.to_string(),
-        None => return Ok(()), // User cancelled
+        None => return Ok(()),
     };
 
-    // Get and update current project
-    let mut current = state.current_project.lock().unwrap();
-    let project = current.as_mut()
+    let mut inner = state.inner.lock().unwrap();
+    let project = inner.current_project.as_mut()
         .ok_or_else(|| "No project currently open".to_string())?;
-
     project.set_database_path(path);
-    let updated_project = project.clone();
-    drop(current);
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    drop(inner);
 
-    // Set unsaved changes flag
-    let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-    *unsaved = true;
-    drop(unsaved);
-
-    // Emit event to notify frontend
-    app.emit("project-changed", ProjectState {
-        project: Some(updated_project),
-        has_unsaved_changes: true,
-    })
-    .map_err(|e| format!("Failed to emit event: {}", e))?;
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
 
     Ok(())
 }
@@ -431,7 +328,6 @@ pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Re
 /// (e.g. `"Successfully imported 42 entries to /path/to/bom.nextbom"`).
 #[tauri::command]
 pub async fn import_csv_to_database(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
-    // Show open file dialog for CSV
     let csv_dialog = app.dialog()
         .file()
         .set_title("Select CSV file")
@@ -441,27 +337,23 @@ pub async fn import_csv_to_database(app: AppHandle, state: State<'_, AppState>) 
         csv_dialog.blocking_pick_file()
     }).await.map_err(|e| e.to_string())?;
 
-    // Check if user selected a file
     let csv_path = match csv_path {
         Some(p) => p.to_string(),
         None => return Err("No file selected".to_string()),
     };
 
-    // Parse CSV file
     let entries = parse_csv(Path::new(&csv_path))?;
 
     if entries.is_empty() {
         return Err("CSV file contains no data".to_string());
     }
 
-    // Get default filename from CSV filename
     let csv_stem = Path::new(&csv_path)
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("bom");
     let default_db_name = format!("{}.nextbom", csv_stem);
 
-    // Show save file dialog for SQLite database
     let db_dialog = app.dialog()
         .file()
         .set_title("Save NextBOM database as")
@@ -472,37 +364,25 @@ pub async fn import_csv_to_database(app: AppHandle, state: State<'_, AppState>) 
         db_dialog.blocking_save_file()
     }).await.map_err(|e| e.to_string())?;
 
-    // Check if user selected a location
     let db_path = match db_path {
         Some(p) => p.to_string(),
         None => return Err("No save location selected".to_string()),
     };
 
-    // Create database and insert entries
     let conn = create_database(Path::new(&db_path))
         .map_err(|e| format!("Failed to create database: {}", e))?;
 
     insert_bom_entries(&conn, &entries)
         .map_err(|e| format!("Failed to insert BOM entries: {}", e))?;
 
-    // Update current project with database path
-    let mut current = state.current_project.lock().unwrap();
-    if let Some(project) = current.as_mut() {
+    let mut inner = state.inner.lock().unwrap();
+    if let Some(project) = inner.current_project.as_mut() {
         project.set_database_path(db_path.clone());
-        let updated_project = project.clone();
-        drop(current);
-
-        // Set unsaved changes flag
-        let mut unsaved = state.project_has_unsaved_changes.lock().unwrap();
-        *unsaved = true;
-        drop(unsaved);
-
-        // Emit event to notify frontend
-        app.emit("project-changed", ProjectState {
-            project: Some(updated_project),
-            has_unsaved_changes: true,
-        })
-        .map_err(|e| format!("Failed to emit event: {}", e))?;
+        inner.has_unsaved_changes = true;
+        let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+        drop(inner);
+        app.emit("project-changed", snapshot)
+            .map_err(|e| format!("Failed to emit event: {}", e))?;
     }
 
     Ok(format!("Successfully imported {} entries to {}", entries.len(), db_path))
@@ -548,7 +428,6 @@ mod tests {
     fn incompatible_lower_major_version_when_current_is_nonzero() {
         let major = current_major();
         if major == 0 {
-            // Can't test a lower major when we're already at 0 — skip.
             return;
         }
         let schema = format!("{}.99.0", major - 1);
