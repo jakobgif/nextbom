@@ -4,19 +4,25 @@ pub mod data;
 use data::Project;
 use std::sync::Mutex;
 
-/// Shared application state, accessible from all Tauri command handlers via `State<AppState>`.
+/// All mutable state held by the application, guarded by a single lock.
 ///
-/// Each field is wrapped in a `Mutex` to allow mutation from async commands. Guards must be
+/// Using one `Mutex` instead of several ensures every state mutation is atomic: no command
+/// can observe a partially-updated snapshot between separate lock acquisitions. Guards must be
 /// dropped before emitting events — never hold a lock across an `app.emit()` call.
-pub struct AppState {
+pub struct AppStateInner {
     /// The project currently open in the application, or `None` if no project is loaded.
-    pub current_project: Mutex<Option<Project>>,
+    pub current_project: Option<Project>,
 
     /// Absolute file path of the open project, or `None` if the project has never been saved.
-    pub current_project_path: Mutex<Option<String>>,
+    pub current_project_path: Option<String>,
 
     /// `true` when the in-memory project differs from the last saved file.
-    pub project_has_unsaved_changes: Mutex<bool>,
+    pub has_unsaved_changes: bool,
+}
+
+/// Shared application state, accessible from all Tauri command handlers via `State<AppState>`.
+pub struct AppState {
+    pub inner: Mutex<AppStateInner>,
 }
 
 /// Initialises and runs the Tauri application.
@@ -30,9 +36,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
         .manage(AppState {
-            current_project: Mutex::new(None),
-            current_project_path: Mutex::new(None),
-            project_has_unsaved_changes: Mutex::new(false),
+            inner: Mutex::new(AppStateInner {
+                current_project: None,
+                current_project_path: None,
+                has_unsaved_changes: false,
+            }),
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_project_state,
