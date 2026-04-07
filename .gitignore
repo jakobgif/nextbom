@@ -27,3 +27,9 @@ venv/
 *.sw?
 
 .vscode
+
+/temp
+
+.claude/settings.local.json
+
+.cache
