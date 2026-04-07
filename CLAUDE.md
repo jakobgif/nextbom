@@ -109,6 +109,11 @@ When implementing a user-facing feature, update or create the relevant page in `
 ### Documentation
 All Rust items (functions, structs, enums, methods) must have a `///` doc comment that explains what it does, its parameters, and any non-obvious behaviour. This applies to both public and private items. The goal is that any function can be understood without reading its body.
 
+Avoid comments that will become stale as the code evolves:
+- Do not repeat a literal value that already appears in the code (e.g. don't write "default maximum of 10 items" when the body says `Self::new(10)`).
+- Do not name specific files or components from other layers (e.g. do not reference `App.tsx` or `Titlebar` in a Rust doc comment) — use role descriptions instead ("frontend components").
+- Do not describe *how* something is implemented when the code is self-evident; focus on *what* and *why*.
+
 ### Unit Tests
 Write `#[cfg(test)]` unit tests for any pure or near-pure Rust logic — functions that transform data, validate input, parse formats, or manage state without requiring Tauri internals (`AppHandle`, `State`, file dialogs). Tests live in a `mod tests` block at the bottom of the same file. Tauri command handlers that depend on `AppHandle`/`State` are excluded; cover those via E2E if needed.
 
