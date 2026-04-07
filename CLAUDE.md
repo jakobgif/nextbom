@@ -2,6 +2,17 @@
 
 A desktop application for creating Bills of Materials (BOMs) for electronic projects, built with Tauri 2, React 19, and TypeScript.
 
+## Working with Subagents
+
+Delegate self-contained tasks to background subagents so the main session stays focused on the primary work. A task is a good candidate for a subagent when it does not need the full conversation context and can be described completely in a short prompt.
+
+Good examples:
+- Writing or updating `docs/` pages while the main session is modifying code
+- Running `cargo test` or checking for compile errors after a change
+- Searching the codebase for all usages of a type or function before a refactor
+
+Spawn these with `run_in_background: true` so the main session continues unblocked.
+
 ## Project Overview
 
 nextbom separates the concerns of *design* and *procurement*. Designers assign generic part IDs to components; the app resolves these to manufacturer part numbers from a separate database during BOM generation. This enables changing manufacturers without touching the design, and supports per-project alternative parts.
@@ -80,3 +91,29 @@ npm run dev
 - Every state mutation emits `project-changed` so the frontend always stays in sync
 - `Project::touch()` updates `last_change` to `Utc::now().timestamp_millis()` — call via the setter methods, not directly
 - Async Tauri commands use `tauri::async_runtime::spawn_blocking` for blocking file dialogs to avoid blocking the async executor
+
+## User Documentation
+
+End-user-facing documentation lives in `docs/` and is published via MkDocs to GitHub Pages. The nav is defined in `mkdocs.yml`.
+
+Any feature, behaviour, or concept that a user needs to understand must be documented there — not just in code comments. This includes:
+- How to create and manage projects
+- File formats (`.json` project files, `.nextbom` database files, CSV import format)
+- Workflow steps (importing a BOM, generating output, project-specific alternatives)
+- Any non-obvious UI behaviour
+
+When implementing a user-facing feature, update or create the relevant page in `docs/` as part of the same piece of work. Keep the writing clear and non-technical — aimed at engineers using the tool, not developers building it.
+
+## Rust Code Quality
+
+### Documentation
+All Rust items (functions, structs, enums, methods) must have a `///` doc comment that explains what it does, its parameters, and any non-obvious behaviour. This applies to both public and private items. The goal is that any function can be understood without reading its body.
+
+### Unit Tests
+Write `#[cfg(test)]` unit tests for any pure or near-pure Rust logic — functions that transform data, validate input, parse formats, or manage state without requiring Tauri internals (`AppHandle`, `State`, file dialogs). Tests live in a `mod tests` block at the bottom of the same file. Tauri command handlers that depend on `AppHandle`/`State` are excluded; cover those via E2E if needed.
+
+Examples of code that must have tests:
+- CSV parsing (`parse_csv`)
+- Schema version compatibility checking
+- `RecentProjects` add/remove/sort logic
+- Any new data transformation or validation function
