@@ -47,4 +47,3 @@ When you generate BOM output, nextbom reads the `.nextbom` working file (designa
 3. [Link your project to a `.nextdb` parts database](project.md#linking-the-parts-database).
 4. [Import your BOM CSV](workflow.md#import-csv) from your schematic tool.
 5. [Create a nextbom BOM file](workflow.md#create-bom-file) from the imported data.
-6. Save the project (`Ctrl+S`).
