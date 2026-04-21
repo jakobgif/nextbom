@@ -1,6 +1,6 @@
 import { ListPlus, Minus, Square, X } from "lucide-react";
 import { Button } from "./ui/button";
-import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarShortcut, MenubarTrigger } from "./ui/menubar";
+import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger } from "./ui/menubar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 export function Titlebar(){
   const appWindow = getCurrentWindow();
   const { theme, setTheme } = useTheme();
-  const { project, hasUnsavedChanges } = useProjectStore();
+  const { project, hasUnsavedChanges, recentProjects } = useProjectStore();
 
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
@@ -102,6 +102,30 @@ export function Titlebar(){
                     toast.error(error.toString());
                   }
                 })}>Open Project</MenubarItem>
+                <MenubarSub>
+                  <MenubarSubTrigger disabled={recentProjects.length === 0}>Open Recent</MenubarSubTrigger>
+                  <MenubarSubContent>
+                    {recentProjects.slice(0, 10).map((rp) => (
+                      <MenubarItem key={rp.file_path} onClick={() => withUnsavedCheck(async () => {
+                        try {
+                          await invoke("open_project", { path: rp.file_path });
+                        } catch (error: any) {
+                          toast.error(error.toString());
+                        }
+                      })}>
+                        {rp.title ?? rp.file_path}
+                      </MenubarItem>
+                    ))}
+                    <MenubarSeparator />
+                    <MenubarItem onClick={async () => {
+                      try {
+                        await invoke("clear_recent_projects");
+                      } catch (error: any) {
+                        toast.error(error.toString());
+                      }
+                    }}>Clear Recent</MenubarItem>
+                  </MenubarSubContent>
+                </MenubarSub>
                 <MenubarSeparator />
                 <MenubarItem disabled={!project} onClick={() => withUnsavedCheck(async () => {
                   try {

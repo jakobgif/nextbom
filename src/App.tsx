@@ -16,7 +16,7 @@ import { useProjectStore } from "./store/project-store";
 import { formatLastChange } from "./lib/utils";
 
 function App() {
-  const { project, initialize } = useProjectStore();
+  const { project, recentProjects, initialize } = useProjectStore();
 
   useEffect(() => {
     initialize();
@@ -52,6 +52,27 @@ function App() {
                   Open Project
                 </Button>
               </div>
+              {recentProjects.length > 0 && (
+                <div className="flex flex-col gap-1 mt-4 w-full max-w-xs">
+                  <p className="text-xs text-muted-foreground px-2 mb-1">Recent</p>
+                  {recentProjects.slice(0, 6).map((rp) => (
+                    <Button
+                      key={rp.file_path}
+                      variant="ghost"
+                      className="justify-start h-auto py-1.5 px-2 text-left"
+                      onClick={async () => {
+                        try {
+                          await invoke("open_project", { path: rp.file_path });
+                        } catch (error: any) {
+                          toast.error(error.toString());
+                        }
+                      }}
+                    >
+                      <span className="truncate text-sm">{rp.title ?? rp.file_path}</span>
+                    </Button>
+                  ))}
+                </div>
+              )}
             </EmptyContent>
           </Empty>
         ) : (
