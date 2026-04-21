@@ -23,19 +23,26 @@ This means:
 
 ## How It Fits Together
 
-```
-Your EDA tool              Parts Database (.nextdb)
-    │                          │
-    │ CSV export               │ maps generic IDs
-    │ (designator →            │ to manufacturer
-    │  generic part ID)        │ part numbers
-    │                          │
-    ▼                          ▼
-nextbom (project)      ←  link project
-    │                    to .nextdb file
-    └─ manages .nbp project file
-    └─ generates .nextbom working file
-       (designator → generic ID)
+```mermaid
+graph LR
+    EDA["Your EDA Tool<br/>(Schematic)"]
+    CSV@{ shape: doc, label: "CSV Export<br/>(designator → generic ID)" }
+    Import["Import CSV"]
+    NextBom@{ shape: doc, label: ".nextbom BOM File<br/>(working file)" }
+    Output@{ shape: doc, label: "Excel Output<br/>(complete BOM)" }
+    
+    Project@{ shape: doc, label: ".nbp Project File" }
+    NextDb[(".nextdb Parts Database")]
+    
+    EDA -->|export| CSV
+    CSV -->|import| Import
+    Import -->|creates| NextBom
+    NextBom -->|parse| Output
+    
+    NextDb -->|linked to| Project
+    NextDb <-->|lookup| Output
+    
+    Project -->|inserts metadata| NextBom
 ```
 
 When you generate BOM output, nextbom reads the `.nextbom` working file (designators and their generic part IDs) and resolves each generic ID through the linked `.nextdb` parts database to get the manufacturer part number.
