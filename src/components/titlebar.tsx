@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { NewProjectDialog } from "./new-project";
 import { toast } from "sonner";
 import { useTheme } from "./theme-provider";
+import { useTooltipSettings } from "./ui/tooltip";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { SetStringDialog } from "./set-string-dialog";
 import { useProjectStore } from "@/store/project-store";
@@ -15,6 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 export function Titlebar(){
   const appWindow = getCurrentWindow();
   const { theme, setTheme } = useTheme();
+  const { enabled: tooltipsEnabled, toggle: toggleTooltips } = useTooltipSettings();
   const { project, hasUnsavedChanges, recentProjects } = useProjectStore();
 
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
@@ -198,6 +200,9 @@ export function Titlebar(){
                 <MenubarItem onClick={() => {
                   setTheme(theme === "dark" ? "light" : "dark");
                 }}>Toggle Theme</MenubarItem>
+                <MenubarItem onClick={toggleTooltips}>
+                  {tooltipsEnabled ? "Disable Tooltips" : "Enable Tooltips"}
+                </MenubarItem>
               </MenubarContent>
             </MenubarMenu>
           </Menubar>
