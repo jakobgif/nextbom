@@ -25,7 +25,7 @@ Transform tasks into verifiable goals. For multi-step tasks, state a brief plan:
 1. [Step] → verify: [check]
 2. [Step] → verify: [check]
 ```
-After Rust changes: run `cargo check` (and `cargo test` if logic changed). After TypeScript changes: run `npx tsc --noEmit`. Weak success criteria require constant clarification — define done before starting.
+After Rust changes: run `cargo test` (not just `cargo check` — always run the full test suite). After TypeScript changes: run `npx tsc --noEmit`. Run tests after every implementation, not just when logic changes. Weak success criteria require constant clarification — define done before starting.
 
 ## Working with Subagents
 
