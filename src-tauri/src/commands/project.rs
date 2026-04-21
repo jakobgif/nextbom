@@ -1,4 +1,4 @@
-use crate::data::{create_database, insert_bom_entries, parse_csv, Project, ProjectState};
+use crate::data::{create_database, insert_bom_entries, insert_metadata, parse_csv, Metadata, Project, ProjectState};
 use crate::AppState;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, State};
@@ -51,15 +51,16 @@ pub fn get_project_state(state: State<AppState>) -> ProjectState {
 
 /// Creates a new in-memory project and makes it the active project.
 ///
-/// `title` is required; `engineer` and `project_specifics` are set only when non-empty. The new
-/// project has no file path — it must be saved before a path is assigned. Emits `project-changed`
-/// with `has_unsaved_changes: true` on success.
+/// `title` is required; `engineer`, `project_specifics`, and `design_variant` are set only when
+/// non-empty. The new project has no file path — it must be saved before a path is assigned.
+/// Emits `project-changed` with `has_unsaved_changes: true` on success.
 #[tauri::command]
 pub fn create_project(
     app: AppHandle,
     title: String,
     engineer: Option<String>,
     project_specifics: Option<String>,
+    design_variant: Option<String>,
     state: State<AppState>,
 ) -> Result<(), String> {
     let mut project = Project::new();
@@ -74,6 +75,12 @@ pub fn create_project(
     if let Some(specs) = project_specifics {
         if !specs.is_empty() {
             project.set_project_specifics(specs);
+        }
+    }
+
+    if let Some(variant) = design_variant {
+        if !variant.is_empty() {
+            project.set_design_variant(variant);
         }
     }
 
@@ -230,11 +237,14 @@ pub async fn save_project(app: AppHandle, state: State<'_, AppState>, save_as: O
 #[tauri::command]
 pub fn set_project_title(app: AppHandle, title: String, state: State<AppState>) -> Result<(), String> {
     let mut inner = state.inner.lock().unwrap();
-    let project = inner.current_project.as_mut()
-        .ok_or_else(|| "No project currently open".to_string())?;
-    project.set_title(title);
+    let project_clone = {
+        let project = inner.current_project.as_mut()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.set_title(title);
+        project.clone()
+    };
     inner.has_unsaved_changes = true;
-    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
     drop(inner);
 
     app.emit("project-changed", snapshot)
@@ -249,11 +259,14 @@ pub fn set_project_title(app: AppHandle, title: String, state: State<AppState>) 
 #[tauri::command]
 pub fn set_project_engineer(app: AppHandle, engineer: String, state: State<AppState>) -> Result<(), String> {
     let mut inner = state.inner.lock().unwrap();
-    let project = inner.current_project.as_mut()
-        .ok_or_else(|| "No project currently open".to_string())?;
-    project.set_engineer(engineer);
+    let project_clone = {
+        let project = inner.current_project.as_mut()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.set_engineer(engineer);
+        project.clone()
+    };
     inner.has_unsaved_changes = true;
-    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
     drop(inner);
 
     app.emit("project-changed", snapshot)
@@ -269,11 +282,36 @@ pub fn set_project_engineer(app: AppHandle, engineer: String, state: State<AppSt
 #[tauri::command]
 pub fn set_project_specifics(app: AppHandle, project_specifics: String, state: State<AppState>) -> Result<(), String> {
     let mut inner = state.inner.lock().unwrap();
-    let project = inner.current_project.as_mut()
-        .ok_or_else(|| "No project currently open".to_string())?;
-    project.set_project_specifics(project_specifics);
+    let project_clone = {
+        let project = inner.current_project.as_mut()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.set_project_specifics(project_specifics);
+        project.clone()
+    };
     inner.has_unsaved_changes = true;
-    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
+    drop(inner);
+
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+
+    Ok(())
+}
+
+/// Sets the design variant of the open project, marks it as unsaved, and emits `project-changed`.
+///
+/// Returns an error if no project is currently open.
+#[tauri::command]
+pub fn set_design_variant(app: AppHandle, design_variant: String, state: State<AppState>) -> Result<(), String> {
+    let mut inner = state.inner.lock().unwrap();
+    let project_clone = {
+        let project = inner.current_project.as_mut()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.set_design_variant(design_variant);
+        project.clone()
+    };
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
     drop(inner);
 
     app.emit("project-changed", snapshot)
@@ -303,11 +341,14 @@ pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Re
     };
 
     let mut inner = state.inner.lock().unwrap();
-    let project = inner.current_project.as_mut()
-        .ok_or_else(|| "No project currently open".to_string())?;
-    project.set_database_path(path);
+    let project_clone = {
+        let project = inner.current_project.as_mut()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.set_database_path(path);
+        project.clone()
+    };
     inner.has_unsaved_changes = true;
-    let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+    let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
     drop(inner);
 
     app.emit("project-changed", snapshot)
@@ -316,18 +357,14 @@ pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Re
     Ok(())
 }
 
-/// Imports a semicolon-delimited CSV file into a new `.nextbom` SQLite database.
+/// Presents a file-open dialog to select a semicolon-delimited CSV file, validates its format,
+/// and stores the path for a subsequent `create_nextbom_file` call.
 ///
-/// Presents two dialogs in sequence: first a file-open dialog to select the source CSV, then a
-/// save-file dialog to choose the output database location. The default database filename is
-/// derived from the CSV filename. Returns `Err("No file selected")` or
-/// `Err("No save location selected")` if the user cancels either dialog.
-///
-/// On success, the new database path is set on the open project (if any), the unsaved-changes
-/// flag is set, `project-changed` is emitted, and a summary string is returned
-/// (e.g. `"Successfully imported 42 entries to /path/to/bom.nextbom"`).
+/// Returns `Err("No file selected")` if the user cancels the dialog, or a parse error if the
+/// CSV is malformed. On success, returns the entry count and the filename stem (without
+/// extension), which the frontend uses as the default PCBA name.
 #[tauri::command]
-pub async fn import_csv_to_database(app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
+pub async fn load_csv(app: AppHandle, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let csv_dialog = app.dialog()
         .file()
         .set_title("Select CSV file")
@@ -347,6 +384,43 @@ pub async fn import_csv_to_database(app: AppHandle, state: State<'_, AppState>) 
     if entries.is_empty() {
         return Err("CSV file contains no data".to_string());
     }
+
+    let filename_stem = Path::new(&csv_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_string();
+
+    state.inner.lock().unwrap().pending_csv_path = Some(csv_path);
+
+    Ok(serde_json::json!({ "count": entries.len(), "filename_stem": filename_stem }))
+}
+
+/// Creates a new `.nextbom` SQLite database from the CSV file previously loaded with `load_csv`.
+///
+/// Presents a save-file dialog to choose the output location. Returns `Err("No CSV loaded")`
+/// if `load_csv` has not been called, or `Err("No save location selected")` if the user
+/// cancels the dialog. On success, writes the BOM and metadata tables, sets the new database
+/// path on the open project (if any), marks it as unsaved, emits `project-changed`, and
+/// returns a summary string.
+#[tauri::command]
+pub async fn create_nextbom_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    pcb_name: String,
+    version: String,
+) -> Result<String, String> {
+    let (csv_path, design_variant) = {
+        let inner = state.inner.lock().unwrap();
+        let csv_path = inner.pending_csv_path.clone()
+            .ok_or_else(|| "No CSV loaded".to_string())?;
+        let design_variant = inner.current_project.as_ref()
+            .and_then(|p| p.design_variant.clone())
+            .unwrap_or_default();
+        (csv_path, design_variant)
+    };
+
+    let entries = parse_csv(Path::new(&csv_path))?;
 
     let csv_stem = Path::new(&csv_path)
         .file_stem()
@@ -375,17 +449,24 @@ pub async fn import_csv_to_database(app: AppHandle, state: State<'_, AppState>) 
     insert_bom_entries(&conn, &entries)
         .map_err(|e| format!("Failed to insert BOM entries: {}", e))?;
 
+    insert_metadata(&conn, &Metadata { pcb_name, design_variant, version })
+        .map_err(|e| format!("Failed to write metadata: {}", e))?;
+
     let mut inner = state.inner.lock().unwrap();
-    if let Some(project) = inner.current_project.as_mut() {
-        project.set_database_path(db_path.clone());
+    if inner.current_project.is_some() {
+        let project_clone = {
+            let project = inner.current_project.as_mut().unwrap();
+            project.set_database_path(db_path.clone());
+            project.clone()
+        };
         inner.has_unsaved_changes = true;
-        let snapshot = ProjectState { project: Some(project.clone()), has_unsaved_changes: true };
+        let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
         drop(inner);
         app.emit("project-changed", snapshot)
             .map_err(|e| format!("Failed to emit event: {}", e))?;
     }
 
-    Ok(format!("Successfully imported {} entries to {}", entries.len(), db_path))
+    Ok(format!("Successfully created database with {} entries: {}", entries.len(), db_path))
 }
 
 #[cfg(test)]

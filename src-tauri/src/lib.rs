@@ -18,6 +18,12 @@ pub struct AppStateInner {
 
     /// `true` when the in-memory project differs from the last saved file.
     pub has_unsaved_changes: bool,
+
+    /// Path of a CSV file selected by the user but not yet written to a database.
+    ///
+    /// Set by `load_csv` and consumed by `create_nextbom_file`. `None` until the user
+    /// selects a file.
+    pub pending_csv_path: Option<String>,
 }
 
 /// Shared application state, accessible from all Tauri command handlers via `State<AppState>`.
@@ -40,6 +46,7 @@ pub fn run() {
                 current_project: None,
                 current_project_path: None,
                 has_unsaved_changes: false,
+                pending_csv_path: None,
             }),
         })
         .invoke_handler(tauri::generate_handler![
@@ -51,8 +58,10 @@ pub fn run() {
             commands::set_project_title,
             commands::set_project_engineer,
             commands::set_project_specifics,
+            commands::set_design_variant,
             commands::set_database_path,
-            commands::import_csv_to_database,
+            commands::load_csv,
+            commands::create_nextbom_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
