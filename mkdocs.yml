@@ -5,10 +5,27 @@ theme:
   name: material
   palette:
     - scheme: slate
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - toc.integrate
+    - content.tooltips
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.superfences
 
 nav:
-  - Home: index.md
-  - Project: project.md
+  - Overview: index.md
+  - Using nextbom:
+    - Projects: project.md
+    - BOM Workflow: workflow.md
+    - File Formats: file-formats.md
+  - Development: development.md
 
 extra:
   social:
