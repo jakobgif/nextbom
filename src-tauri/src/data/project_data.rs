@@ -24,10 +24,11 @@ pub struct Project {
     /// Project title
     pub title: Option<String>,
 
-    /// Path to the nextbom database file
+    /// Absolute path to the linked `.nextdb` parts database file
     pub database_path: Option<String>,
 
-    /// Identifier of the project specific parts
+    /// Name of the `alt_` table in the `.nextdb` database to append to the base `parts` table
+    /// during BOM generation. Entries from both tables are combined as-is in the final BOM.
     pub project_specifics: Option<String>,
 
     /// Design variant identifier for this project (e.g. "full", "lite")
@@ -76,15 +77,16 @@ impl Project {
         self.touch();
     }
 
-    /// Sets the database path and updates the last_change timestamp
+    /// Sets the `.nextdb` parts database path and updates the last_change timestamp
     pub fn set_database_path(&mut self, path: String) {
         self.database_path = Some(path);
         self.touch();
     }
 
-    /// Sets the project specifics identifier and updates the last_change timestamp
+    /// Sets the `alt_` table name used for project-specific parts and updates the last_change timestamp.
+    /// Pass an empty string to clear the value.
     pub fn set_project_specifics(&mut self, project_specifics: String) {
-        self.project_specifics = Some(project_specifics);
+        self.project_specifics = if project_specifics.is_empty() { None } else { Some(project_specifics) };
         self.touch();
     }
 

@@ -357,6 +357,33 @@ pub fn set_project_engineer(app: AppHandle, engineer: String, state: State<AppSt
     Ok(())
 }
 
+/// Returns the list of `alt_`-prefixed table names in the `.nextdb` parts database linked to the
+/// open project. These tables represent project-specific alternative part sets.
+///
+/// Returns an error if no project is open, no database is linked, or the file cannot be opened.
+#[tauri::command]
+pub fn get_parts_tables(state: State<AppState>) -> Result<Vec<String>, String> {
+    let inner = state.inner.lock().unwrap();
+    let db_path = inner.current_project.as_ref()
+        .ok_or_else(|| "No project currently open".to_string())?
+        .database_path.as_ref()
+        .ok_or_else(|| "No parts database linked to this project".to_string())?
+        .clone();
+    drop(inner);
+
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open parts database: {}", e))?;
+
+    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'alt_%' ORDER BY name")
+        .map_err(|e| format!("Failed to query tables: {}", e))?;
+
+    let tables: Result<Vec<String>, _> = stmt.query_map([], |row| row.get(0))
+        .map_err(|e| format!("Failed to read tables: {}", e))?
+        .collect();
+
+    tables.map_err(|e| format!("Failed to read table name: {}", e))
+}
+
 /// Sets the project-specifics identifier of the open project, marks it as unsaved, and emits
 /// `project-changed`.
 ///
@@ -402,7 +429,7 @@ pub fn set_design_variant(app: AppHandle, design_variant: String, state: State<A
     Ok(())
 }
 
-/// Presents a file-open dialog to select a `.nextbom` database and sets it on the open project.
+/// Presents a file-open dialog to select a `.nextdb` parts database and sets it on the open project.
 ///
 /// Returns `Ok(())` without changing state if the user cancels. Marks the project as unsaved
 /// and emits `project-changed` on success. Returns an error if no project is currently open.
@@ -410,8 +437,8 @@ pub fn set_design_variant(app: AppHandle, design_variant: String, state: State<A
 pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let dialog = app.dialog()
         .file()
-        .set_title("Select NextBOM Database File")
-        .add_filter("NextBOM Database", &["nextbom"]);
+        .set_title("Select Parts Database File")
+        .add_filter("Parts Database", &["nextdb"]);
 
     let file_path = tauri::async_runtime::spawn_blocking(move || {
         dialog.blocking_pick_file()
@@ -482,9 +509,8 @@ pub async fn load_csv(app: AppHandle, state: State<'_, AppState>) -> Result<serd
 ///
 /// Presents a save-file dialog to choose the output location. Returns `Err("No CSV loaded")`
 /// if `load_csv` has not been called, or `Err("No save location selected")` if the user
-/// cancels the dialog. On success, writes the BOM and metadata tables, sets the new database
-/// path on the open project (if any), marks it as unsaved, emits `project-changed`, and
-/// returns a summary string.
+/// cancels the dialog. On success, writes the BOM and metadata tables and returns a summary
+/// string. The `.nextbom` file is a standalone working file and is not linked to the project.
 #[tauri::command]
 pub async fn create_nextbom_file(
     app: AppHandle,
@@ -533,20 +559,6 @@ pub async fn create_nextbom_file(
 
     insert_metadata(&conn, &Metadata { pcb_name, design_variant, version })
         .map_err(|e| format!("Failed to write metadata: {}", e))?;
-
-    let mut inner = state.inner.lock().unwrap();
-    if inner.current_project.is_some() {
-        let project_clone = {
-            let project = inner.current_project.as_mut().unwrap();
-            project.set_database_path(db_path.clone());
-            project.clone()
-        };
-        inner.has_unsaved_changes = true;
-        let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
-        drop(inner);
-        app.emit("project-changed", snapshot)
-            .map_err(|e| format!("Failed to emit event: {}", e))?;
-    }
 
     Ok(format!("Successfully created database with {} entries: {}", entries.len(), db_path))
 }

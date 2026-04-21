@@ -13,11 +13,12 @@ uuid: string,
  */
 title: string | null, 
 /**
- * Path to the nextbom database file
+ * Absolute path to the linked `.nextdb` parts database file
  */
 database_path: string | null, 
 /**
- * Identifier of the project specific parts
+ * Name of the `alt_` table in the `.nextdb` database to append to the base `parts` table
+ * during BOM generation. Entries from both tables are combined as-is in the final BOM.
  */
 project_specifics: string | null, 
 /**
