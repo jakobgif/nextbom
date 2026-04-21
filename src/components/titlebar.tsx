@@ -1,58 +1,71 @@
 import { ListPlus, Minus, Square, X } from "lucide-react";
 import { Button } from "./ui/button";
-import { Menubar, MenubarCheckboxItem, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarShortcut, MenubarSub, MenubarSubContent, MenubarSubTrigger, MenubarTrigger } from "./ui/menubar";
+import { Menubar, MenubarContent, MenubarItem, MenubarMenu, MenubarSeparator, MenubarShortcut, MenubarTrigger } from "./ui/menubar";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { Project } from "@/types/Project";
-import { ProjectState } from "@/types/ProjectState";
+import { useEffect, useRef, useState } from "react";
 import { NewProjectDialog } from "./new-project";
 import { toast } from "sonner";
 import { useTheme } from "./theme-provider";
 import { relaunch, exit } from "@tauri-apps/plugin-process";
 import { SetStringDialog } from "./set-string-dialog";
+import { useProjectStore } from "@/store/project-store";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 
 export function Titlebar(){
   const appWindow = getCurrentWindow();
   const { theme, setTheme } = useTheme();
+  const { project, hasUnsavedChanges } = useProjectStore();
 
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
-  const [currentProjectUnsaved, setCurrentProjectUnsaved] = useState<boolean>(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
   const [engineerDialogOpen, setEngineerDialogOpen] = useState(false);
   const [projectSpecificsDialogOpen, setProjectSpecificsDialogOpen] = useState(false);
+  const [designVariantDialogOpen, setDesignVariantDialogOpen] = useState(false);
+  // Stores the action to run after the user confirms discarding unsaved changes.
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
+  // Ref so the window close handler always reads the latest value without re-registering.
+  const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
   useEffect(() => {
-    // Initialize project state on mount
-    invoke<ProjectState>("get_project_state").then((state) => {
-      setCurrentProject(state.project);
-      setCurrentProjectUnsaved(state.has_unsaved_changes);
-    });
-
-    // Listen for project changes from backend
-    listen<ProjectState>("project-changed", (event) => {
-      setCurrentProject(event.payload.project);
-      setCurrentProjectUnsaved(event.payload.has_unsaved_changes);
-    });
-  }, []);
+    hasUnsavedChangesRef.current = hasUnsavedChanges;
+  }, [hasUnsavedChanges]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        if (!currentProject) return;
+        if (!project) return;
         invoke("save_project").catch((error: any) => {
           toast.error(error.toString());
         });
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentProject]);
+  }, [project]);
+
+  // Intercept window close when there are unsaved changes.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    appWindow.onCloseRequested((event) => {
+      if (hasUnsavedChangesRef.current) {
+        event.preventDefault();
+        setPendingAction(() => () => appWindow.close());
+      }
+    }).then((fn) => { unlisten = fn; });
+    return () => unlisten?.();
+  }, []);
+
+  /** Runs `action` immediately if there are no unsaved changes, otherwise prompts first. */
+  const withUnsavedCheck = (action: () => void) => {
+    if (hasUnsavedChanges) {
+      setPendingAction(() => action);
+    } else {
+      action();
+    }
+  };
 
   return (
     <>
@@ -65,16 +78,16 @@ export function Titlebar(){
                 <p>File</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarItem onClick={() => setNewProjectDialogOpen(true)}>New Project</MenubarItem>
+                <MenubarItem onClick={() => withUnsavedCheck(() => setNewProjectDialogOpen(true))}>New Project</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem disabled={!currentProject} onClick={async () => {
+                <MenubarItem disabled={!project} onClick={async () => {
                   try {
                     await invoke("save_project");
                   } catch (error: any) {
                     toast.error(error.toString());
                   }
                 }}>Save Project<MenubarShortcut>Ctrl+S</MenubarShortcut></MenubarItem>
-                <MenubarItem disabled={!currentProject} onClick={async () => {
+                <MenubarItem disabled={!project} onClick={async () => {
                   try {
                     await invoke("save_project", { saveAs: true });
                   } catch (error: any) {
@@ -82,21 +95,21 @@ export function Titlebar(){
                   }
                 }}>Save Project As</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem onClick={async () => {
+                <MenubarItem onClick={() => withUnsavedCheck(async () => {
                   try {
                     await invoke("open_project");
                   } catch (error: any) {
                     toast.error(error.toString());
                   }
-                }}>Open Project</MenubarItem>
-                <MenubarSub>
-                  {/* <MenubarSubTrigger>Open Recent</MenubarSubTrigger> */}
-                  <MenubarSubContent>
-                    <MenubarItem disabled>File</MenubarItem>
-                  </MenubarSubContent>
-                </MenubarSub>
+                })}>Open Project</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem disabled={!currentProject} onClick={() => invoke("close_project")}>Close Project</MenubarItem>
+                <MenubarItem disabled={!project} onClick={() => withUnsavedCheck(async () => {
+                  try {
+                    await invoke("close_project");
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                })}>Close Project</MenubarItem>
                 <MenubarSeparator />
                 <MenubarItem onClick={async () => {
                   try {
@@ -119,17 +132,18 @@ export function Titlebar(){
                 <p>Edit</p>
               </MenubarTrigger>
               <MenubarContent>
-                <MenubarItem disabled={!currentProject} onSelect={() => setTitleDialogOpen(true)}>Set Title</MenubarItem>
-                <MenubarItem disabled={!currentProject} onSelect={() => setEngineerDialogOpen(true)}>Set Engineer</MenubarItem>
+                <MenubarItem disabled={!project} onSelect={() => setTitleDialogOpen(true)}>Set Title</MenubarItem>
+                <MenubarItem disabled={!project} onSelect={() => setEngineerDialogOpen(true)}>Set Engineer</MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem disabled={!currentProject} onClick={async () => {
+                <MenubarItem disabled={!project} onClick={async () => {
                   try {
                     await invoke("set_database_path");
                   } catch (error: any) {
                     toast.error(error.toString());
                   }
                 }}>Select Database</MenubarItem>
-                <MenubarItem disabled={!currentProject} onSelect={() => setProjectSpecificsDialogOpen(true)}>Set Project Specifics</MenubarItem>
+                <MenubarItem disabled={!project} onSelect={() => setProjectSpecificsDialogOpen(true)}>Set Project Specifics</MenubarItem>
+                <MenubarItem disabled={!project} onSelect={() => setDesignVariantDialogOpen(true)}>Set Design Variant</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -140,20 +154,14 @@ export function Titlebar(){
                 <MenubarItem onClick={() => {
                   setTheme(theme === "dark" ? "light" : "dark");
                 }}>Toggle Theme</MenubarItem>
-                {/* <MenubarSeparator />
-                <MenubarItem inset disabled>Report Issue</MenubarItem>
-                <MenubarSeparator />
-                <MenubarCheckboxItem disabled>Development Mode</MenubarCheckboxItem>
-                <MenubarSeparator />
-                <MenubarItem inset disabled>About</MenubarItem> */}
               </MenubarContent>
             </MenubarMenu>
           </Menubar>
-          </div>
+        </div>
         <div className="absolute left-1/2 -translate-x-1/2">
           <p className="text-muted-foreground text-sm">
-            {currentProjectUnsaved && "(unsaved) "}
-            {currentProject?.title}
+            {hasUnsavedChanges && "(unsaved) "}
+            {project?.title}
           </p>
         </div>
         <div className="ml-auto flex flex-row">
@@ -162,6 +170,7 @@ export function Titlebar(){
           <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.close()}><X className="size-4.5"/></Button>
         </div>
       </div>
+
       <NewProjectDialog open={newProjectDialogOpen} onOpenChange={setNewProjectDialogOpen} />
       <SetStringDialog
         open={titleDialogOpen}
@@ -170,7 +179,7 @@ export function Titlebar(){
         description="Enter a new title for your project."
         label="Title"
         placeholder="Enter project title"
-        currentValue={currentProject?.title || ""}
+        currentValue={project?.title || ""}
         onSubmit={async (value) => {
           try {
             await invoke("set_project_title", { title: value });
@@ -187,7 +196,7 @@ export function Titlebar(){
         description="Enter the name of the engineer working on the project."
         label="Engineer"
         placeholder="Enter engineer name"
-        currentValue={currentProject?.engineer || ""}
+        currentValue={project?.engineer || ""}
         onSubmit={async (value) => {
           try {
             await invoke("set_project_engineer", { engineer: value });
@@ -204,7 +213,7 @@ export function Titlebar(){
         description="Enter the identifier of the project specific parts to use for this project."
         label="Project Specifics"
         placeholder="Enter identifier"
-        currentValue={currentProject?.project_specifics || ""}
+        currentValue={project?.project_specifics || ""}
         onSubmit={async (value) => {
           try {
             await invoke("set_project_specifics", { projectSpecifics: value });
@@ -214,6 +223,43 @@ export function Titlebar(){
           }
         }}
       />
+      <SetStringDialog
+        open={designVariantDialogOpen}
+        onOpenChange={setDesignVariantDialogOpen}
+        title="Set Design Variant"
+        description="Enter the design variant identifier for this project (e.g. full, lite)."
+        label="Design Variant"
+        placeholder="e.g. full, lite"
+        currentValue={project?.design_variant || ""}
+        onSubmit={async (value) => {
+          try {
+            await invoke("set_design_variant", { designVariant: value });
+            setDesignVariantDialogOpen(false);
+          } catch (error: any) {
+            toast.error(error.toString());
+          }
+        }}
+      />
+
+      {/* Unsaved changes confirmation */}
+      <Dialog open={pendingAction !== null} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Unsaved Changes</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. Do you want to discard them and continue?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingAction(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => {
+              const action = pendingAction;
+              setPendingAction(null);
+              action?.();
+            }}>Discard Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

@@ -1,42 +1,32 @@
 import "./App.css";
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { Info, ListPlus } from "lucide-react";
+import { Check, Info, ListPlus } from "lucide-react";
 import { Titlebar } from "./components/titlebar";
 import { Button } from "./components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./components/ui/empty";
 import { Input } from "./components/ui/input";
-import { Label } from "./components/ui/label";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./components/ui/accordion";
 import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
-import { Field, FieldDescription, FieldError, FieldLabel } from "./components/ui/field";
+import { Field, FieldError, FieldLabel } from "./components/ui/field";
 import { Checkbox } from "./components/ui/checkbox";
-import { Project } from "./types/Project";
 import { NewProjectDialog } from "./components/new-project";
-import { ProjectState } from "./types/ProjectState";
 import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
+import { useProjectStore } from "./store/project-store";
+import { formatLastChange } from "./lib/utils";
 
 function App() {
-  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const { project, initialize } = useProjectStore();
 
   useEffect(() => {
-    // Initialize project state on mount
-    invoke<ProjectState>("get_project_state").then((state) => {
-      setCurrentProject(state.project);
-    });
-
-    // Listen for project changes from backend
-    listen<ProjectState>("project-changed", (event) => {
-      setCurrentProject(event.payload.project);
-    });
+    initialize();
   }, []);
 
   return (
     <div className="h-screen flex flex-col overflow-clip">
       <Titlebar/>
       <div className="flex flex-col flex-1 overflow-clip">
-        {!currentProject ? (
+        {!project ? (
           <Empty className="select-none">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -62,13 +52,6 @@ function App() {
                   Open Project
                 </Button>
               </div>
-              {/* <div className="flex flex-col items-start min-w-60 w-[30vw] pt-2">
-                <p className="text-lg font-medium pb-2">Recent</p>
-                <div className="flex flex-row">
-                  <a href="#" className="text-start pr-10 text-primary font-medium">filename</a>
-                  <div className="text-start text-muted-foreground">6:03:47 PM [vite] (client) hmr update /src/App.tsx, /src/App.css6:03:47 PM [vite] (client) hmr update /src/App.tsx, /src/App.css6:03:47</div>
-                </div>
-              </div> */}
             </EmptyContent>
           </Empty>
         ) : (
@@ -76,98 +59,131 @@ function App() {
             <Accordion type="multiple" defaultValue={["item-1"]}>
               <AccordionItem value="item-1">
                 <AccordionTrigger>1. Create a nextbom database file</AccordionTrigger>
-                <AccordionContent>
+                <AccordionContent forceMount>
                   <CreateNextbomFile />
-                </AccordionContent>
-              </AccordionItem>
-
-              <AccordionItem value="item-2">
-                <AccordionTrigger>2. Add part numbers</AccordionTrigger>
-                <AccordionContent>
-                  <AddPartNumbers />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
           </div>
         )}
       </div>
-      <div className="w-full flex flex-row flex-wrap items-center justify-start bg-primary min-h-[24px] gap-x-2 px-2">
-        {currentProject &&
-          Object.entries(currentProject).map(([key, value]) => (
-            <div
-              key={key}
-              className="flex gap-1 whitespace-nowrap"
-            >
-              <span className="font-semibold">{key}:</span>
-              <span>{String(value)}</span>
-            </div>
-          ))
-        }
+      <div className="w-full flex items-center px-3 gap-4 bg-card border-t min-h-[24px] text-xs text-muted-foreground select-none">
+        {project && (
+          <>
+            <span className="font-medium text-foreground">{project.title ?? "Untitled"}</span>
+            {project.engineer && <span>{project.engineer}</span>}
+            <span className="ml-auto">Modified: {formatLastChange(project.last_change)}</span>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
 function CreateNextbomFile(){
+  const { project } = useProjectStore();
+
+  const [csvLoaded, setCsvLoaded] = useState(false);
+  const [fileCreated, setFileCreated] = useState(false);
+
+  const [pcbNameAuto, setPcbNameAuto] = useState(true);
+  const [pcbNameManual, setPcbNameManual] = useState("");
+
+  const [version, setVersion] = useState("");
+  const [versionError, setVersionError] = useState(false);
+
+  const pcbName = pcbNameAuto ? (project?.title ?? "") : pcbNameManual;
+
+  const handleImportCsv = async () => {
+    try {
+      const { count } = await invoke<{ count: number; filename_stem: string }>("load_csv");
+      setCsvLoaded(true);
+      toast.success(`Loaded ${count} entries from CSV`);
+    } catch (error: any) {
+      if (error !== "No file selected") {
+        toast.error(error.toString());
+      }
+    }
+  };
+
+  const handleCreateFile = async () => {
+    if (!/^\d+$/.test(version)) {
+      setVersionError(true);
+      return;
+    }
+    setVersionError(false);
+    try {
+      const result = await invoke<string>("create_nextbom_file", {
+        pcbName,
+        version,
+      });
+      setFileCreated(true);
+      toast.success(result);
+    } catch (error: any) {
+      if (error !== "No save location selected") {
+        toast.error(error.toString());
+      }
+    }
+  };
+
   return (
     <div className="flex flex-col items-start gap-6 ml-5">
       <Field>
         <FieldLabel>Select CSV file</FieldLabel>
         <div className="flex flex-row items-center">
-          <Input type="file" />
+          <Button onClick={handleImportCsv}>Import CSV</Button>
+          {csvLoaded && <Check className="ml-2 size-4 text-green-500" />}
           <Popover>
             <PopoverTrigger><Button variant={"ghost"} size={"icon-sm"} className="rounded-full ml-2"><Info /></Button></PopoverTrigger>
-            <PopoverContent className="select-none">csv file explanation</PopoverContent>
+            <PopoverContent className="select-none">
+              <p>
+                CSV format:<br />
+                <code>part ID;Designator</code><br />
+                (semicolon-separated)
+              </p>
+            </PopoverContent>
           </Popover>
         </div>
       </Field>
 
-      <div className="flex flex-row justify-between w-full gap-10">
+      <div className="flex flex-row flex-wrap gap-6">
         <Field className="min-w-60">
-          <FieldLabel>Set PCBA name</FieldLabel>
+          <FieldLabel>PCBA name</FieldLabel>
           <div className="flex flex-row items-center">
-            <Input />
+            <Input
+              value={pcbName}
+              disabled={pcbNameAuto}
+              onChange={(e) => setPcbNameManual(e.target.value)}
+            />
             <div className="flex items-center gap-2 ml-4">
-              <Checkbox defaultChecked={true}/>
+              <Checkbox checked={pcbNameAuto} onCheckedChange={(v) => setPcbNameAuto(!!v)} />
               <p>Auto</p>
             </div>
           </div>
         </Field>
-        
-        <Field className="min-w-60 w-auto">
-          <FieldLabel>Set BOM version</FieldLabel>
+
+        <Field>
+          <FieldLabel>BOM version</FieldLabel>
           <div className="flex flex-row items-center">
-            <Input className="w-20"/>
-            <div className="flex items-center gap-2 ml-4">
-              <Checkbox defaultChecked={true}/>
-              <p>Auto</p>
-            </div>
+            <Input
+              className="w-20"
+              placeholder="1"
+              value={version}
+              onChange={(e) => { setVersion(e.target.value); setVersionError(false); }}
+            />
             <Popover>
               <PopoverTrigger><Button variant={"ghost"} size={"icon-sm"} className="rounded-full ml-2"><Info /></Button></PopoverTrigger>
               <PopoverContent className="select-none">Increase the BOM version when the design evolves over time. This field is not meant to be used to identify design variants.</PopoverContent>
             </Popover>
           </div>
-          <FieldError>BOM version must be a number</FieldError>
+          <FieldError className={versionError ? "" : "invisible"}>BOM version must be a number</FieldError>
         </Field>
-
       </div>
 
-      
-      
-      
-
-      <p></p>
-      <p>auto (increment from project settings)</p>
-
-      
-    </div>
-  )
-}
-
-function AddPartNumbers(){
-  return (
-    <div className="grid w-full items-center gap-3">
-      test
+      <div className="flex flex-row items-center">
+        <Button onClick={handleCreateFile} disabled={!csvLoaded}>Create NextBOM working file</Button>
+        {fileCreated && <Check className="ml-2 size-4 text-green-500" />}
+      </div>
     </div>
   )
 }
