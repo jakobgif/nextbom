@@ -88,14 +88,13 @@ function App() {
           </div>
         )}
       </div>
-      <div className="w-full flex items-center px-3 gap-4 bg-card border-t min-h-[24px] text-xs text-muted-foreground select-none">
-        {project && (
-          <>
-            <span className="font-medium text-foreground">{project.title ?? "Untitled"}</span>
-            {project.engineer && <span>{project.engineer}</span>}
-            <span className="ml-auto">Modified: {formatLastChange(project.last_change)}</span>
-          </>
-        )}
+      <div className="w-full flex items-center px-3 gap-3 bg-card border-t min-h-[24px] text-xs text-muted-foreground select-none">
+        {project && Object.entries(project).map(([key, value]) => (
+          <span key={key}>
+            <span className="text-muted-foreground/60">{key}: </span>
+            {key === "last_change" ? formatLastChange(value as unknown as bigint) : String(value ?? "null")}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -167,8 +166,8 @@ function CreateNextbomFile(){
         </div>
       </Field>
 
-      <div className="flex flex-row flex-wrap gap-6">
-        <Field className="min-w-60">
+      <div className="flex flex-col gap-6">
+        <Field className="w-96">
           <FieldLabel>PCBA name</FieldLabel>
           <div className="flex flex-row items-center">
             <Input
@@ -183,7 +182,7 @@ function CreateNextbomFile(){
           </div>
         </Field>
 
-        <Field>
+        <Field className="w-auto">
           <FieldLabel>BOM version</FieldLabel>
           <div className="flex flex-row items-center">
             <Input
@@ -192,12 +191,12 @@ function CreateNextbomFile(){
               value={version}
               onChange={(e) => { setVersion(e.target.value); setVersionError(false); }}
             />
+            {versionError && <FieldError className="ml-2">BOM version must be a number</FieldError>}
             <Popover>
               <PopoverTrigger><Button variant={"ghost"} size={"icon-sm"} className="rounded-full ml-2"><Info /></Button></PopoverTrigger>
               <PopoverContent className="select-none">Increase the BOM version when the design evolves over time. This field is not meant to be used to identify design variants.</PopoverContent>
             </Popover>
           </div>
-          <FieldError className={versionError ? "" : "invisible"}>BOM version must be a number</FieldError>
         </Field>
       </div>
 
