@@ -13,7 +13,7 @@ Fill in the fields:
 | **Title** | Yes | Human-readable name for the project. Used as the default filename when saving. |
 | **Engineer** | No | Engineer or team responsible. Shown in the status bar. |
 | **Project Specifics ID** | No | Identifier for a set of project-specific alternative parts. Leave blank if you are not using per-project alternatives. |
-| **Design Variant** | No | Distinguishes assembly variants from the same design — for example `full` vs `lite`. Carried through into the generated database. |
+| **Design Variant** | No | Distinguishes assembly variants from the same design — for example `full` vs `lite`. |
 
 ## Opening a Project
 
