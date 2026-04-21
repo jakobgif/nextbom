@@ -50,7 +50,7 @@ This file is used internally to generate the final BOM output. It is not directl
 
 See [File Formats](file-formats.md#nextbom-working-files) for details.
 
-## Step 4: Generate BOM Output
+<!-- ## Step 4: Generate BOM Output
 
 Once a `.nextbom` working file is created, you can generate the final BOM output (Excel format). 
 
@@ -58,4 +58,4 @@ The app reads the `.nextbom` file to get each designator and its generic part ID
 
 The output is an Excel table ready for procurement or manufacturing.
 
-See [File Formats](file-formats.md) to understand how these files work together.
+See [File Formats](file-formats.md) to understand how these files work together. -->
