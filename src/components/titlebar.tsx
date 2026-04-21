@@ -20,8 +20,15 @@ export function Titlebar(){
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
   const [engineerDialogOpen, setEngineerDialogOpen] = useState(false);
-  const [projectSpecificsDialogOpen, setProjectSpecificsDialogOpen] = useState(false);
   const [designVariantDialogOpen, setDesignVariantDialogOpen] = useState(false);
+  const [partsAlternatives, setPartsAlternatives] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!project?.database_path) { setPartsAlternatives([]); return; }
+    invoke<string[]>("get_parts_tables")
+      .then(setPartsAlternatives)
+      .catch(() => setPartsAlternatives([]));
+  }, [project?.database_path]);
   // Stores the action to run after the user confirms discarding unsaved changes.
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
@@ -163,7 +170,23 @@ export function Titlebar(){
                     toast.error(error.toString());
                   }
                 }}>Select Parts Database</MenubarItem>
-                <MenubarItem disabled={!project} onSelect={() => setProjectSpecificsDialogOpen(true)}>Set Project Specifics</MenubarItem>
+                <MenubarSub>
+                  <MenubarSubTrigger disabled={!project}>Set Project Specifics</MenubarSubTrigger>
+                  <MenubarSubContent>
+                    <MenubarItem onSelect={async () => {
+                      try { await invoke("set_project_specifics", { projectSpecifics: "" }); }
+                      catch (e: any) { toast.error(e.toString()); }
+                    }}>None</MenubarItem>
+                    {partsAlternatives.length > 0 && <MenubarSeparator />}
+                    {partsAlternatives.map((table) => (
+                      <MenubarItem key={table} onSelect={async () => {
+                        try { await invoke("set_project_specifics", { projectSpecifics: table }); }
+                        catch (e: any) { toast.error(e.toString()); }
+                      }}>{table.replace(/^alt_/, "")}</MenubarItem>
+                    ))}
+                    {!project?.database_path && <MenubarItem disabled>No database linked</MenubarItem>}
+                  </MenubarSubContent>
+                </MenubarSub>
                 <MenubarItem disabled={!project} onSelect={() => setDesignVariantDialogOpen(true)}>Set Design Variant</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
@@ -222,23 +245,6 @@ export function Titlebar(){
           try {
             await invoke("set_project_engineer", { engineer: value });
             setEngineerDialogOpen(false);
-          } catch (error: any) {
-            toast.error(error.toString());
-          }
-        }}
-      />
-      <SetStringDialog
-        open={projectSpecificsDialogOpen}
-        onOpenChange={setProjectSpecificsDialogOpen}
-        title="Set Project Specifics"
-        description="Enter the identifier of the project specific parts to use for this project."
-        label="Project Specifics"
-        placeholder="Enter identifier"
-        currentValue={project?.project_specifics || ""}
-        onSubmit={async (value) => {
-          try {
-            await invoke("set_project_specifics", { projectSpecifics: value });
-            setProjectSpecificsDialogOpen(false);
           } catch (error: any) {
             toast.error(error.toString());
           }
