@@ -25,7 +25,6 @@ nav:
     - Projects: project.md
     - BOM Workflow: workflow.md
     - File Formats: file-formats.md
-  - Development: development.md
 
 extra:
   social:
