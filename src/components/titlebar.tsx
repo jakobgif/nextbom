@@ -103,19 +103,22 @@ export function Titlebar(){
                   }
                 })}>Open Project</MenubarItem>
                 <MenubarSub>
-                  <MenubarSubTrigger disabled={recentProjects.length === 0}>Open Recent</MenubarSubTrigger>
+                  <MenubarSubTrigger>Open Recent</MenubarSubTrigger>
                   <MenubarSubContent>
-                    {recentProjects.slice(0, 10).map((rp) => (
-                      <MenubarItem key={rp.file_path} onClick={() => withUnsavedCheck(async () => {
-                        try {
-                          await invoke("open_project", { path: rp.file_path });
-                        } catch (error: any) {
-                          toast.error(error.toString());
-                        }
-                      })}>
-                        {rp.title ?? rp.file_path}
-                      </MenubarItem>
-                    ))}
+                    {recentProjects.length === 0
+                      ? <MenubarItem disabled>No recent projects</MenubarItem>
+                      : recentProjects.slice(0, 10).map((rp) => (
+                          <MenubarItem key={rp.file_path} onClick={() => withUnsavedCheck(async () => {
+                            try {
+                              await invoke("open_project", { path: rp.file_path });
+                            } catch (error: any) {
+                              toast.error(error.toString());
+                            }
+                          })}>
+                            {rp.title ?? rp.file_path}
+                          </MenubarItem>
+                        ))
+                    }
                     <MenubarSeparator />
                     <MenubarItem onClick={async () => {
                       try {
@@ -159,7 +162,7 @@ export function Titlebar(){
                   } catch (error: any) {
                     toast.error(error.toString());
                   }
-                }}>Select Database</MenubarItem>
+                }}>Select Parts Database</MenubarItem>
                 <MenubarItem disabled={!project} onSelect={() => setProjectSpecificsDialogOpen(true)}>Set Project Specifics</MenubarItem>
                 <MenubarItem disabled={!project} onSelect={() => setDesignVariantDialogOpen(true)}>Set Design Variant</MenubarItem>
               </MenubarContent>
