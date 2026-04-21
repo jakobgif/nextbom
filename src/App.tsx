@@ -1,12 +1,12 @@
 import "./App.css";
 import { useEffect, useState } from "react";
-import { Check, Info, ListPlus } from "lucide-react";
+import { Check, ListPlus } from "lucide-react";
 import { Titlebar } from "./components/titlebar";
 import { Button } from "./components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./components/ui/empty";
 import { Input } from "./components/ui/input";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./components/ui/accordion";
-import { Popover, PopoverContent, PopoverTrigger } from "./components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./components/ui/tooltip";
 import { Field, FieldError, FieldLabel } from "./components/ui/field";
 import { Checkbox } from "./components/ui/checkbox";
 import { NewProjectDialog } from "./components/new-project";
@@ -101,23 +101,24 @@ function App() {
 }
 
 function CreateNextbomFile(){
-  const { project } = useProjectStore();
-
   const [csvLoaded, setCsvLoaded] = useState(false);
   const [fileCreated, setFileCreated] = useState(false);
 
   const [pcbNameAuto, setPcbNameAuto] = useState(true);
   const [pcbNameManual, setPcbNameManual] = useState("");
+  const [csvFileStem, setCsvFileStem] = useState("");
+  const [pcbNameError, setPcbNameError] = useState(false);
 
   const [version, setVersion] = useState("");
   const [versionError, setVersionError] = useState(false);
 
-  const pcbName = pcbNameAuto ? (project?.title ?? "") : pcbNameManual;
+  const pcbName = pcbNameAuto ? csvFileStem : pcbNameManual;
 
   const handleImportCsv = async () => {
     try {
-      const { count } = await invoke<{ count: number; filename_stem: string }>("load_csv");
+      const { count, filename_stem } = await invoke<{ count: number; filename_stem: string }>("load_csv");
       setCsvLoaded(true);
+      setCsvFileStem(filename_stem);
       toast.success(`Loaded ${count} entries from CSV`);
     } catch (error: any) {
       if (error !== "No file selected") {
@@ -127,6 +128,11 @@ function CreateNextbomFile(){
   };
 
   const handleCreateFile = async () => {
+    if (!pcbName.trim()) {
+      setPcbNameError(true);
+      return;
+    }
+    setPcbNameError(false);
     if (!/^\d+$/.test(version)) {
       setVersionError(true);
       return;
@@ -151,51 +157,65 @@ function CreateNextbomFile(){
       <Field>
         <FieldLabel>Select CSV file</FieldLabel>
         <div className="flex flex-row items-center">
-          <Button onClick={handleImportCsv}>Import CSV</Button>
-          {csvLoaded && <Check className="ml-2 size-4 text-green-500" />}
-          <Popover>
-            <PopoverTrigger><Button variant={"ghost"} size={"icon-sm"} className="rounded-full ml-2"><Info /></Button></PopoverTrigger>
-            <PopoverContent className="select-none">
+          <Tooltip>
+            <TooltipTrigger asChild><Button onClick={handleImportCsv}>Import CSV</Button></TooltipTrigger>
+            <TooltipContent className="select-none">
               <p>
                 CSV format:<br />
                 <code>part ID;Designator</code><br />
                 (semicolon-separated)
               </p>
-            </PopoverContent>
-          </Popover>
+            </TooltipContent>
+          </Tooltip>
+          {csvLoaded && <Check className="ml-2 size-4 text-green-500" />}
         </div>
       </Field>
 
       <div className="flex flex-col gap-6">
         <Field className="w-96">
           <FieldLabel>PCBA name</FieldLabel>
-          <div className="flex flex-row items-center">
-            <Input
-              value={pcbName}
-              disabled={pcbNameAuto}
-              onChange={(e) => setPcbNameManual(e.target.value)}
-            />
-            <div className="flex items-center gap-2 ml-4">
-              <Checkbox checked={pcbNameAuto} onCheckedChange={(v) => setPcbNameAuto(!!v)} />
-              <p>Auto</p>
+          <div className="flex flex-col">
+            <div className="flex flex-row items-center">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="block w-full">
+                    <Input
+                      value={pcbName}
+                      disabled={pcbNameAuto}
+                      onChange={(e) => { setPcbNameManual(e.target.value); setPcbNameError(false); }}
+                    />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="select-none">Name used in the generated BOM file.</TooltipContent>
+              </Tooltip>
+              <div className="flex items-center gap-2 ml-4">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span><Checkbox checked={pcbNameAuto} onCheckedChange={(v) => { setPcbNameAuto(!!v); if (v) setPcbNameError(false); }} /></span>
+                  </TooltipTrigger>
+                  <TooltipContent className="select-none">Derive the name automatically<br />from the CSV filename.</TooltipContent>
+                </Tooltip>
+                <p>Auto</p>
+              </div>
             </div>
+            {pcbNameError && <FieldError className="mt-1">PCBA name is required</FieldError>}
           </div>
         </Field>
 
         <Field className="w-auto">
           <FieldLabel>BOM version</FieldLabel>
-          <div className="flex flex-row items-center">
-            <Input
-              className="w-20"
-              placeholder="1"
-              value={version}
-              onChange={(e) => { setVersion(e.target.value); setVersionError(false); }}
-            />
-            {versionError && <FieldError className="ml-2">BOM version must be a number</FieldError>}
-            <Popover>
-              <PopoverTrigger><Button variant={"ghost"} size={"icon-sm"} className="rounded-full ml-2"><Info /></Button></PopoverTrigger>
-              <PopoverContent className="select-none">Increase the BOM version when the design evolves over time. This field is not meant to be used to identify design variants.</PopoverContent>
-            </Popover>
+          <div className="flex flex-col">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Input
+                  className="w-20"
+                  value={version}
+                  onChange={(e) => { setVersion(e.target.value); setVersionError(false); }}
+                />
+              </TooltipTrigger>
+              <TooltipContent className="select-none">Increase the BOM version when the design<br />evolves over time. Not meant to identify<br />design variants.</TooltipContent>
+            </Tooltip>
+            {versionError && <FieldError className="mt-1">BOM version must be a number</FieldError>}
           </div>
         </Field>
       </div>
