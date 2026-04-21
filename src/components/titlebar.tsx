@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { NewProjectDialog } from "./new-project";
 import { toast } from "sonner";
 import { useTheme } from "./theme-provider";
-import { relaunch, exit } from "@tauri-apps/plugin-process";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { SetStringDialog } from "./set-string-dialog";
 import { useProjectStore } from "@/store/project-store";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -52,7 +52,7 @@ export function Titlebar(){
     appWindow.onCloseRequested((event) => {
       if (hasUnsavedChangesRef.current) {
         event.preventDefault();
-        setPendingAction(() => () => appWindow.close());
+        setPendingAction(() => () => appWindow.destroy());
       }
     }).then((fn) => { unlisten = fn; });
     return () => unlisten?.();
@@ -142,13 +142,7 @@ export function Titlebar(){
                     toast.error(error.toString());
                   }
                 }}>Restart</MenubarItem>
-                <MenubarItem onClick={async () => {
-                  try {
-                    await exit(0);
-                  } catch (error: any) {
-                    toast.error(error.toString());
-                  }
-                }}>Exit</MenubarItem>
+                <MenubarItem onClick={() => withUnsavedCheck(() => appWindow.destroy())}>Exit</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -191,7 +185,7 @@ export function Titlebar(){
         <div className="ml-auto flex flex-row">
           <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.minimize()}><Minus className="size-4"/></Button>
           <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.toggleMaximize()}><Square className="size-3.5"/></Button>
-          <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => appWindow.close()}><X className="size-4.5"/></Button>
+          <Button variant={"ghost"} size={"icon"} className="rounded-none" onClick={() => withUnsavedCheck(() => appWindow.destroy())}><X className="size-4.5"/></Button>
         </div>
       </div>
 
