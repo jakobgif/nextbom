@@ -3,17 +3,40 @@ import { Tooltip as TooltipPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 
+const TooltipsEnabledContext = React.createContext<{
+  enabled: boolean;
+  toggle: () => void;
+}>({ enabled: true, toggle: () => {} });
+
 function TooltipProvider({
   delayDuration = 0,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+  const [enabled, setEnabled] = React.useState(
+    () => localStorage.getItem("tooltips-enabled") !== "false"
+  );
+
+  const toggle = React.useCallback(() => {
+    setEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem("tooltips-enabled", String(next));
+      return next;
+    });
+  }, []);
+
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
-      {...props}
-    />
+    <TooltipsEnabledContext.Provider value={{ enabled, toggle }}>
+      <TooltipPrimitive.Provider
+        data-slot="tooltip-provider"
+        delayDuration={delayDuration}
+        {...props}
+      />
+    </TooltipsEnabledContext.Provider>
   )
+}
+
+function useTooltipSettings() {
+  return React.useContext(TooltipsEnabledContext);
 }
 
 function Tooltip({
@@ -34,6 +57,8 @@ function TooltipContent({
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+  const { enabled } = React.useContext(TooltipsEnabledContext);
+  if (!enabled) return null;
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
@@ -52,4 +77,4 @@ function TooltipContent({
   )
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, useTooltipSettings }
