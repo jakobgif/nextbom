@@ -530,11 +530,7 @@ pub async fn create_nextbom_file(
 
     let entries = parse_csv(Path::new(&csv_path))?;
 
-    let csv_stem = Path::new(&csv_path)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("bom");
-    let default_db_name = format!("{}.nextbom", csv_stem);
+    let default_db_name = format!("{}.nextbom", pcb_name);
 
     let db_dialog = app.dialog()
         .file()
