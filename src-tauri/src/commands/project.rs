@@ -1,8 +1,57 @@
-use crate::data::{create_database, insert_bom_entries, insert_metadata, parse_csv, Metadata, Project, ProjectState};
+use crate::data::{create_database, insert_bom_entries, insert_metadata, parse_csv, Metadata, Project, ProjectState, RecentProject, RecentProjects};
 use crate::AppState;
 use std::path::Path;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
+
+// ── Recent-projects persistence helpers ──────────────────────────────────────
+
+/// Returns the path to `recent_projects.json` inside the app config directory.
+fn recent_projects_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join("recent_projects.json"))
+        .map_err(|e| format!("Failed to resolve config dir: {}", e))
+}
+
+/// Loads the recent projects list from disk, returning a default empty list on any error.
+///
+/// Errors (missing file, parse failure) are silently swallowed so a missing or corrupt
+/// persistence file never prevents the app from starting.
+pub fn load_recent_from_disk(app: &AppHandle) -> RecentProjects {
+    let Ok(path) = recent_projects_path(app) else {
+        return RecentProjects::default();
+    };
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return RecentProjects::default();
+    };
+    serde_json::from_str(&content).unwrap_or_default()
+}
+
+/// Serialises `recent` to JSON and writes it to the app config directory.
+///
+/// Creates the config directory if it does not exist. Returns an error only if the
+/// directory cannot be created or the file cannot be written — serialisation failures
+/// are not expected for this type.
+fn persist_recent(app: &AppHandle, recent: &RecentProjects) -> Result<(), String> {
+    let path = recent_projects_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config dir: {}", e))?;
+    }
+    let json = serde_json::to_string_pretty(recent)
+        .map_err(|e| format!("Failed to serialise recent projects: {}", e))?;
+    std::fs::write(&path, json)
+        .map_err(|e| format!("Failed to write recent projects: {}", e))?;
+    Ok(())
+}
+
+/// Emits a `recent-projects-changed` event carrying the current items list.
+fn emit_recent_changed(app: &AppHandle, recent: &RecentProjects) {
+    let _ = app.emit("recent-projects-changed", recent.items.clone());
+}
+
+// ── Schema compatibility ──────────────────────────────────────────────────────
 
 /// Returns `Ok(())` if `file_schema` is compatible with the running application version.
 ///
@@ -35,6 +84,8 @@ fn check_schema_compatibility(file_schema: &str) -> Result<(), String> {
 
     Ok(())
 }
+
+// ── Project commands ──────────────────────────────────────────────────────────
 
 /// Returns a snapshot of the current [`ProjectState`] (open project + unsaved-changes flag).
 ///
@@ -116,29 +167,51 @@ pub fn close_project(app: AppHandle, state: State<AppState>) -> Result<(), Strin
     Ok(())
 }
 
-/// Presents a file-open dialog and loads the selected `.nbp` project file.
+/// Opens a project from `path`, or presents a file-open dialog when `path` is `None`.
 ///
-/// Returns `Ok(())` without changing state if the user cancels the dialog. Validates schema
-/// compatibility before accepting the file. On success, replaces the active project and emits
-/// `project-changed` with `has_unsaved_changes: false`.
+/// Returns `Ok(())` without changing state if the user cancels the dialog. When a path is
+/// provided and the file is not found, the project is removed from the recent list before
+/// returning an error. Validates schema compatibility before accepting the file. On success,
+/// adds the project to the recent list, persists it, and emits both `project-changed` and
+/// `recent-projects-changed`.
 #[tauri::command]
-pub async fn open_project(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let dialog = app.dialog()
-        .file()
-        .set_title("Open project")
-        .add_filter("NextBOM Project", &["nbp"]);
+pub async fn open_project(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    path: Option<String>,
+) -> Result<(), String> {
+    let path = if let Some(p) = path {
+        p
+    } else {
+        let dialog = app.dialog()
+            .file()
+            .set_title("Open project")
+            .add_filter("NextBOM Project", &["nbp"]);
 
-    let file_path = tauri::async_runtime::spawn_blocking(move || {
-        dialog.blocking_pick_file()
-    }).await.map_err(|e| e.to_string())?;
+        let file_path = tauri::async_runtime::spawn_blocking(move || {
+            dialog.blocking_pick_file()
+        }).await.map_err(|e| e.to_string())?;
 
-    let path = match file_path {
-        Some(p) => p.to_string(),
-        None => return Ok(()),
+        match file_path {
+            Some(p) => p.to_string(),
+            None => return Ok(()),
+        }
     };
 
-    let content = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                let mut inner = state.inner.lock().unwrap();
+                inner.recent_projects.remove(&path);
+                let recent = inner.recent_projects.clone();
+                drop(inner);
+                let _ = persist_recent(&app, &recent);
+                emit_recent_changed(&app, &recent);
+            }
+            return Err(format!("Failed to read file: {}", e));
+        }
+    };
 
     let project: Project = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse project file: {}", e))?;
@@ -147,11 +220,15 @@ pub async fn open_project(app: AppHandle, state: State<'_, AppState>) -> Result<
 
     let mut inner = state.inner.lock().unwrap();
     inner.current_project = Some(project.clone());
-    inner.current_project_path = Some(path);
+    inner.current_project_path = Some(path.clone());
     inner.has_unsaved_changes = false;
+    inner.recent_projects.add(path, project.title.clone());
+    let recent = inner.recent_projects.clone();
     let snapshot = ProjectState { project: Some(project), has_unsaved_changes: false };
     drop(inner);
 
+    let _ = persist_recent(&app, &recent);
+    emit_recent_changed(&app, &recent);
     app.emit("project-changed", snapshot)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
 
@@ -162,8 +239,8 @@ pub async fn open_project(app: AppHandle, state: State<'_, AppState>) -> Result<
 ///
 /// Shows a save-file dialog when `save_as` is `true` or when the project has no existing path.
 /// Returns `Ok(())` without saving if the user cancels the dialog. The default filename is
-/// derived from the project title. Clears the unsaved-changes flag and emits `project-changed`
-/// on success.
+/// derived from the project title. Adds the saved path to the recent list, persists it, and
+/// emits both `recent-projects-changed` and `project-changed` on success.
 #[tauri::command]
 pub async fn save_project(app: AppHandle, state: State<'_, AppState>, save_as: Option<bool>) -> Result<(), String> {
     let save_as = save_as.unwrap_or(false);
@@ -217,14 +294,19 @@ pub async fn save_project(app: AppHandle, state: State<'_, AppState>, save_as: O
         .map_err(|e| format!("Failed to write file: {}", e))?;
 
     let mut inner = state.inner.lock().unwrap();
-    inner.current_project_path = Some(path);
+    inner.current_project_path = Some(path.clone());
     inner.has_unsaved_changes = false;
+    let title = inner.current_project.as_ref().and_then(|p| p.title.clone());
+    inner.recent_projects.add(path, title);
+    let recent = inner.recent_projects.clone();
     let snapshot = ProjectState {
         project: inner.current_project.clone(),
         has_unsaved_changes: false,
     };
     drop(inner);
 
+    let _ = persist_recent(&app, &recent);
+    emit_recent_changed(&app, &recent);
     app.emit("project-changed", snapshot)
         .map_err(|e| format!("Failed to emit event: {}", e))?;
 
@@ -467,6 +549,44 @@ pub async fn create_nextbom_file(
     }
 
     Ok(format!("Successfully created database with {} entries: {}", entries.len(), db_path))
+}
+
+// ── Recent projects commands ──────────────────────────────────────────────────
+
+/// Returns the current list of recently opened projects, most recent first.
+#[tauri::command]
+pub fn get_recent_projects(state: State<AppState>) -> Vec<RecentProject> {
+    state.inner.lock().unwrap().recent_projects.items.clone()
+}
+
+/// Removes a single entry from the recent projects list by file path, persists, and emits
+/// `recent-projects-changed`.
+#[tauri::command]
+pub fn remove_recent_project(
+    app: AppHandle,
+    state: State<AppState>,
+    file_path: String,
+) -> Result<(), String> {
+    let mut inner = state.inner.lock().unwrap();
+    inner.recent_projects.remove(&file_path);
+    let recent = inner.recent_projects.clone();
+    drop(inner);
+    let _ = persist_recent(&app, &recent);
+    emit_recent_changed(&app, &recent);
+    Ok(())
+}
+
+/// Clears the entire recent projects list, persists the empty list, and emits
+/// `recent-projects-changed`.
+#[tauri::command]
+pub fn clear_recent_projects(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    let mut inner = state.inner.lock().unwrap();
+    inner.recent_projects.clear();
+    let recent = inner.recent_projects.clone();
+    drop(inner);
+    let _ = persist_recent(&app, &recent);
+    emit_recent_changed(&app, &recent);
+    Ok(())
 }
 
 #[cfg(test)]

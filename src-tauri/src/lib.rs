@@ -1,8 +1,9 @@
 pub mod commands;
 pub mod data;
 
-use data::Project;
+use data::{Project, RecentProjects};
 use std::sync::Mutex;
+use tauri::Manager;
 
 /// All mutable state held by the application, guarded by a single lock.
 ///
@@ -24,6 +25,9 @@ pub struct AppStateInner {
     /// Set by `load_csv` and consumed by `create_nextbom_file`. `None` until the user
     /// selects a file.
     pub pending_csv_path: Option<String>,
+
+    /// Recently opened projects list, persisted to the app config directory.
+    pub recent_projects: RecentProjects,
 }
 
 /// Shared application state, accessible from all Tauri command handlers via `State<AppState>`.
@@ -33,21 +37,26 @@ pub struct AppState {
 
 /// Initialises and runs the Tauri application.
 ///
-/// Registers all plugins, sets up the managed [`AppState`], wires every Tauri command, and
-/// blocks until the window is closed.
+/// Registers all plugins, sets up the managed [`AppState`] (loading recent projects from disk),
+/// wires every Tauri command, and blocks until the window is closed.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
-        .manage(AppState {
-            inner: Mutex::new(AppStateInner {
-                current_project: None,
-                current_project_path: None,
-                has_unsaved_changes: false,
-                pending_csv_path: None,
-            }),
+        .setup(|app| {
+            let recent = commands::load_recent_from_disk(app.handle());
+            app.manage(AppState {
+                inner: Mutex::new(AppStateInner {
+                    current_project: None,
+                    current_project_path: None,
+                    has_unsaved_changes: false,
+                    pending_csv_path: None,
+                    recent_projects: recent,
+                }),
+            });
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_project_state,
@@ -62,6 +71,9 @@ pub fn run() {
             commands::set_database_path,
             commands::load_csv,
             commands::create_nextbom_file,
+            commands::get_recent_projects,
+            commands::remove_recent_project,
+            commands::clear_recent_projects,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
