@@ -3,8 +3,7 @@ use ts_rs::TS;
 
 /// Payload emitted with every `project-changed` event and returned by `get_project_state`.
 ///
-/// Both `App.tsx` and `Titlebar` subscribe to this independently — there is no shared React
-/// context; each component keeps its own copy.
+/// Frontend subscribers use this to keep their local state in sync after any state mutation.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "../../src/types/ProjectState.ts")]
 pub struct ProjectState {
@@ -31,6 +30,9 @@ pub struct Project {
     /// Identifier of the project specific parts
     pub project_specifics: Option<String>,
 
+    /// Design variant identifier for this project (e.g. "full", "lite")
+    pub design_variant: Option<String>,
+
     /// Name of the engineer responsible for the project
     pub engineer: Option<String>,
 
@@ -55,6 +57,7 @@ impl Project {
             title: None,
             database_path: None,
             project_specifics: None,
+            design_variant: None,
             engineer: None,
             latest_bom_version: None,
             last_change: now,
@@ -82,6 +85,12 @@ impl Project {
     /// Sets the project specifics identifier and updates the last_change timestamp
     pub fn set_project_specifics(&mut self, project_specifics: String) {
         self.project_specifics = Some(project_specifics);
+        self.touch();
+    }
+
+    /// Sets the design variant identifier and updates the last_change timestamp
+    pub fn set_design_variant(&mut self, design_variant: String) {
+        self.design_variant = Some(design_variant);
         self.touch();
     }
 
