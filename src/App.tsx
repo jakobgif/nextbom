@@ -80,13 +80,13 @@ function App() {
             <Accordion type="multiple" defaultValue={["item-1"]}>
               <AccordionItem value="item-1">
                 <AccordionTrigger>1. Create a nextbom database file</AccordionTrigger>
-                <AccordionContent forceMount>
+                <AccordionContent>
                   <CreateNextbomFile key={project.uuid} />
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-2">
                 <AccordionTrigger>2. Resolve manufacturers &amp; MPNs</AccordionTrigger>
-                <AccordionContent forceMount>
+                <AccordionContent>
                   <ResolveManufacturers key={project.uuid} />
                 </AccordionContent>
               </AccordionItem>
