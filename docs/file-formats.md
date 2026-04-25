@@ -14,7 +14,6 @@ Plain JSON, saved with readable formatting. Stores all project metadata but not 
   "database_path": "/path/to/db.nextbom",
   "project_specifics": "parts_2025",
   "design_variant": "full",
-  "latest_bom_version": "1",
   "last_change": 1713707400000,
   "schema": "0.1.0"
 }
@@ -28,7 +27,6 @@ Plain JSON, saved with readable formatting. Stores all project metadata but not 
 | `database_path` | Absolute path to the linked `.nextdb` parts database file. Empty if no database has been linked yet. |
 | `project_specifics` | Identifier for a project-specific alternative parts set (may be empty). |
 | `design_variant` | Assembly variant name (may be empty). |
-| `latest_bom_version` | Numeric version of the most recently created BOM. |
 | `last_change` | Unix timestamp in milliseconds of the last modification. |
 | `schema` | File format version (semver). Major-version compatibility: a `1.x` file can only be opened by `1.x` software. |
 
