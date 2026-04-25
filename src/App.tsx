@@ -25,7 +25,7 @@ function App() {
   return (
     <div className="h-screen flex flex-col overflow-clip">
       <Titlebar/>
-      <div className="flex flex-col flex-1 overflow-clip">
+      <div className="flex flex-col flex-1 min-h-0">
         {!project ? (
           <Empty className="select-none">
             <EmptyHeader>
