@@ -36,12 +36,20 @@ A SQLite database containing the mapping from generic part IDs to manufacturer p
 
 **Schema:**
 
+All tables (`parts` and every `alt_*`) share the same column schema:
+
+| Column | Type | Description |
+|---|---|---|
+| `ID`   | TEXT | Generic part identifier (e.g. `CAP00100`). A single ID may appear in multiple rows — one per manufacturer/MPN. |
+| `mfr`  | TEXT | Manufacturer name (e.g. `TDK`). |
+| `mpn`  | TEXT | Manufacturer part number (e.g. `C0402X5R1C104K`). |
+
 | Table | Description |
 |---|---|
-| `parts` | Primary part list. One row per generic part ID. |
+| `parts` | Primary part list. |
 | `alt_<name>` | Project-specific alternative part set. One table per set, named with the `alt_` prefix (e.g. `alt_2025`). |
 
-When generating a BOM, nextbom starts from the `parts` table and appends all entries from the selected `alt_` table. The two lists are combined as-is — entries from both tables appear in the final BOM.
+When resolving a BOM, nextbom queries the `parts` table for each generic part ID. If the project has a `project_specifics` value set, the matching `alt_<project_specifics>` table is also queried and its entries are appended. All matching rows across both tables are merged into manufacturer and MPN arrays.
 
 Multiple projects can share the same `.nextdb` file, or each project can use a different one.
 
@@ -55,6 +63,12 @@ A SQLite working file created when you import a CSV. It contains the schematic d
 |---|---|---|
 | `designator` | TEXT (PK) | Schematic reference designator (e.g. `C1`, `R12`). |
 | `part_id` | TEXT | Generic part identifier (e.g. `CAP00100`). |
+| `mfr`     | TEXT | JSON array of manufacturer names from the main `parts` table (e.g. `["TDK","Murata"]`). Populated during step 2. |
+| `mpn`     | TEXT | JSON array of MPNs from the main `parts` table (e.g. `["C0402X5R","GRM0332"]`). Populated during step 2. |
+| `alt_mfr` | TEXT | JSON array of manufacturer names from the project-specific `alt_*` table. Empty array if no alt entries exist. Populated during step 2. |
+| `alt_mpn` | TEXT | JSON array of MPNs from the project-specific `alt_*` table. Empty array if no alt entries exist. Populated during step 2. |
+
+The four resolution columns are added by step 2. A freshly created `.nextbom` file has only `designator` and `part_id`. When alt entries exist for a part, `part_id` is updated to include the project-specifics suffix (e.g. `RES00100_2025`).
 
 ## CSV Import Format {#csv-import-format}
 
