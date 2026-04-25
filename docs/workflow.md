@@ -30,13 +30,16 @@ After a successful import, nextbom shows how many entries were loaded and uses t
 
 ## Step 2: Configure the BOM {#configure-bom}
 
-Before creating the database, set two fields:
+Before creating the database, set these fields:
 
 **PCBA Name**
 : The name of the printed circuit board assembly. Defaults to the CSV filename stem but can be edited freely. Stored as metadata in the generated database.
 
 **BOM Version**
 : A numeric version identifier for this BOM (digits only). Stored as metadata alongside the PCBA name and design variant.
+
+**Design Variant**
+: Identifies which assembly variant this BOM belongs to — for example `full` or `lite`. Pre-populated from the last value used in this project. After the file is created, the value is saved back to the project so it loads automatically next time.
 
 ## Step 3: Create the BOM Working File {#create-bom-file}
 

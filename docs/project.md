@@ -13,7 +13,6 @@ Fill in the fields:
 | **Title** | Yes | Human-readable name for the project. Used as the default filename when saving. |
 | **Engineer** | No | Engineer or team responsible. Shown in the status bar. |
 | **Project Specifics ID** | No | Identifier for a set of project-specific alternative parts. Leave blank if you are not using per-project alternatives. |
-| **Design Variant** | No | Distinguishes assembly variants from the same design — for example `full` vs `lite`. |
 
 ## Opening a Project
 
@@ -31,13 +30,14 @@ nextbom will prompt you before closing or switching projects if there are unsave
 
 ## Editing Project Metadata
 
-All metadata fields can be changed after creation via the **Edit** menu:
+All metadata fields can be changed after creation via the **Project** menu:
 
-- **Edit → Set Title**
-- **Edit → Set Engineer**
-- **Edit → Set Project Specifics**
-- **Edit → Set Design Variant**
-- **Edit → Select Database** — link or re-link the project to a `.nextdb` parts database file
+- **Project → Set Title**
+- **Project → Set Engineer**
+- **Project → Set Project Specifics**
+- **Project → Select Parts Database** — link or re-link the project to a `.nextdb` parts database file
+
+The design variant is not set here — it is entered when [creating a BOM working file](workflow.md#configure-bom) and automatically stored in the project for reuse next time.
 
 The `.nextdb` file is the shared parts database that maps generic part IDs to manufacturer part numbers. See [File Formats](file-formats.md) to understand the relationship between `.nextbom` project BOMs and `.nextdb` parts databases.
 
@@ -45,7 +45,7 @@ The `.nextdb` file is the shared parts database that maps generic part IDs to ma
 
 Before you can create a BOM file, your project must be linked to a `.nextdb` parts database. This database contains the mappings from generic part IDs to actual manufacturer part numbers.
 
-Use **Edit → Select Database** to choose or change the linked `.nextdb` file. The database path is then stored in your project file.
+Use **Project → Select Parts Database** to choose or change the linked `.nextdb` file. The database path is then stored in your project file.
 
 If you don't have a `.nextdb` file yet, you'll need to create it separately or obtain one from your organization.
 

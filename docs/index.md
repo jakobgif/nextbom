@@ -16,7 +16,7 @@ This means:
 
 ## What You Can Do Today
 
-- Create and manage projects with title, engineer, and variant metadata
+- Create and manage projects with title, engineer, and project-specifics metadata
 - Import a semicolon-delimited CSV from your EDA tool to load component designators and part IDs
 - Generate a `.nextbom` BOM file from the imported CSV
 - Save and reopen projects (`.nbp` files), with recent projects tracked automatically
@@ -50,7 +50,7 @@ When you generate BOM output, nextbom reads the `.nextbom` working file (designa
 ## Getting Started
 
 1. Launch nextbom.
-2. [Create a project](project.md) — give it a title, optionally an engineer name and design variant.
+2. [Create a project](project.md) — give it a title, and optionally an engineer name.
 3. [Link your project to a `.nextdb` parts database](project.md#linking-the-parts-database).
 4. [Import your BOM CSV](workflow.md#import-csv) from your schematic tool.
 5. [Create a nextbom BOM file](workflow.md#create-bom-file) from the imported data.
