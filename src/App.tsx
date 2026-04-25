@@ -84,6 +84,12 @@ function App() {
                   <CreateNextbomFile key={project.uuid} />
                 </AccordionContent>
               </AccordionItem>
+              <AccordionItem value="item-2">
+                <AccordionTrigger>2. Resolve manufacturers &amp; MPNs</AccordionTrigger>
+                <AccordionContent forceMount>
+                  <ResolveManufacturers key={project.uuid} />
+                </AccordionContent>
+              </AccordionItem>
             </Accordion>
           </div>
         )}
@@ -250,6 +256,33 @@ function CreateNextbomFile(){
       </div>
     </div>
   )
+}
+
+function ResolveManufacturers() {
+  const [resolved, setResolved] = useState(false);
+  const [resolving, setResolving] = useState(false);
+
+  const handleResolve = async () => {
+    setResolving(true);
+    try {
+      const result = await invoke<string>("resolve_bom_manufacturers");
+      setResolved(true);
+      toast.success(result);
+    } catch (error: any) {
+      if (error !== "No file selected") {
+        toast.error(error.toString());
+      }
+    } finally {
+      setResolving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-row items-center ml-5">
+      <Button onClick={handleResolve} disabled={resolving}>Resolve</Button>
+      {resolved && <Check className="ml-2 size-4 text-green-500" />}
+    </div>
+  );
 }
 
 export default App;
