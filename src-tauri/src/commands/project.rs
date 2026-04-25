@@ -112,6 +112,7 @@ pub fn create_project(
     engineer: Option<String>,
     project_specifics: Option<String>,
     design_variant: Option<String>,
+    database_path: Option<String>,
     state: State<AppState>,
 ) -> Result<(), String> {
     let mut project = Project::new();
@@ -132,6 +133,12 @@ pub fn create_project(
     if let Some(variant) = design_variant {
         if !variant.is_empty() {
             project.set_design_variant(variant);
+        }
+    }
+
+    if let Some(db_path) = database_path {
+        if !db_path.is_empty() {
+            project.set_database_path(db_path);
         }
     }
 
@@ -372,6 +379,24 @@ pub fn get_parts_tables(state: State<AppState>) -> Result<Vec<String>, String> {
     drop(inner);
 
     let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open parts database: {}", e))?;
+
+    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'alt_%' ORDER BY name")
+        .map_err(|e| format!("Failed to query tables: {}", e))?;
+
+    let tables: Result<Vec<String>, _> = stmt.query_map([], |row| row.get(0))
+        .map_err(|e| format!("Failed to read tables: {}", e))?
+        .collect();
+
+    tables.map_err(|e| format!("Failed to read table name: {}", e))
+}
+
+/// Returns the `alt_*` table names from a parts database file at the given path.
+///
+/// Used when creating a new project before any project is open.
+#[tauri::command]
+pub fn get_parts_tables_from_path(database_path: String) -> Result<Vec<String>, String> {
+    let conn = rusqlite::Connection::open(&database_path)
         .map_err(|e| format!("Failed to open parts database: {}", e))?;
 
     let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'alt_%' ORDER BY name")

@@ -67,6 +67,7 @@ pub fn run() {
             commands::set_project_title,
             commands::set_project_engineer,
             commands::get_parts_tables,
+            commands::get_parts_tables_from_path,
             commands::set_project_specifics,
             commands::set_design_variant,
             commands::set_database_path,
