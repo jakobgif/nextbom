@@ -37,9 +37,6 @@ pub struct Project {
     /// Name of the engineer responsible for the project
     pub engineer: Option<String>,
 
-    /// Latest BOM version string
-    pub latest_bom_version: Option<String>,
-
     /// Timestamp of the last change (Unix timestamp in milliseconds, UTC)
     /// Updates when BOM is created, project file is modified, or any change occurs
     pub last_change: i64,
@@ -60,7 +57,6 @@ impl Project {
             project_specifics: None,
             design_variant: None,
             engineer: None,
-            latest_bom_version: None,
             last_change: now,
             schema: env!("CARGO_PKG_VERSION").to_string(),
         }
@@ -102,9 +98,4 @@ impl Project {
         self.touch();
     }
 
-    /// Sets the latest BOM version and updates the last_change timestamp
-    pub fn set_latest_bom_version(&mut self, version: String) {
-        self.latest_bom_version = Some(version);
-        self.touch();
-    }
 }
