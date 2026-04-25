@@ -10,10 +10,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "./ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { toast } from "sonner";
+import { Check, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface NewProjectDialogProps {
   trigger?: React.ReactNode;
@@ -28,6 +31,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
   const [databasePath, setDatabasePath] = useState("");
   const [availableSpecifics, setAvailableSpecifics] = useState<string[]>([]);
   const [projectSpecifics, setProjectSpecifics] = useState("");
+  const [specificsOpen, setSpecificsOpen] = useState(false);
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -40,6 +44,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
       setDatabasePath("");
       setAvailableSpecifics([]);
       setProjectSpecifics("");
+      setSpecificsOpen(false);
     }
   }, [open]);
 
@@ -87,6 +92,13 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
   const dbFilename = databasePath
     ? databasePath.replace(/\\/g, "/").split("/").pop()
     : "";
+
+  const specificsOptions = [
+    { value: "", label: "None" },
+    ...availableSpecifics.map((t) => ({ value: t, label: t.replace(/^alt_/, "") })),
+  ];
+
+  const selectedLabel = specificsOptions.find((o) => o.value === projectSpecifics)?.label ?? "None";
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -138,21 +150,36 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
           </div>
           <div className="flex flex-col gap-2">
             <Label>Project Specifics (Optional)</Label>
-            <select
-              value={projectSpecifics}
-              onChange={(e) => setProjectSpecifics(e.target.value)}
-              disabled={!databasePath}
-              className="border-input dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none disabled:cursor-not-allowed disabled:opacity-50 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-            >
-              <option value="">
-                {databasePath ? "None" : "Select a database first"}
-              </option>
-              {availableSpecifics.map((table) => (
-                <option key={table} value={table}>
-                  {table.replace(/^alt_/, "")}
-                </option>
-              ))}
-            </select>
+            <Popover open={specificsOpen} onOpenChange={setSpecificsOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={!databasePath}
+                  className={cn(
+                    "border-input dark:bg-input/30 flex h-9 w-full items-center justify-between rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none",
+                    "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    !databasePath && "text-muted-foreground",
+                  )}
+                >
+                  <span>{databasePath ? selectedLabel : "Select a database first"}</span>
+                  <ChevronDown className="size-4 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-1" align="start">
+                {specificsOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => { setProjectSpecifics(opt.value); setSpecificsOpen(false); }}
+                    className="hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-sm outline-none"
+                  >
+                    <Check className={cn("size-4", projectSpecifics === opt.value ? "opacity-100" : "opacity-0")} />
+                    {opt.label}
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
         <DialogFooter>
