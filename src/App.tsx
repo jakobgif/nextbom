@@ -79,13 +79,13 @@ function App() {
           <div className="flex-1 overflow-y-auto px-[10vw] py-10">
             <Accordion type="multiple" defaultValue={["item-1"]}>
               <AccordionItem value="item-1">
-                <AccordionTrigger>1. Create a nextbom database file</AccordionTrigger>
+                <AccordionTrigger>1. Create a NextBOM file</AccordionTrigger>
                 <AccordionContent>
                   <CreateNextbomFile key={project.uuid} />
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-2">
-                <AccordionTrigger>2. Resolve manufacturers &amp; MPNs</AccordionTrigger>
+                <AccordionTrigger>2. Resolve Manufacturers &amp; MPNs</AccordionTrigger>
                 <AccordionContent>
                   <ResolveManufacturers key={project.uuid} />
                 </AccordionContent>
@@ -174,7 +174,7 @@ function CreateNextbomFile(){
         <FieldLabel>Select CSV file</FieldLabel>
         <div className="flex flex-row items-center">
           <Tooltip>
-            <TooltipTrigger asChild><Button onClick={handleImportCsv} disabled={csvPicking}>Import CSV</Button></TooltipTrigger>
+            <TooltipTrigger asChild><Button onClick={handleImportCsv} disabled={csvPicking}>Import CSV file</Button></TooltipTrigger>
             <TooltipContent className="select-none">
               <p>
                 CSV format:<br />
@@ -251,7 +251,7 @@ function CreateNextbomFile(){
       </div>
 
       <div className="flex flex-row items-center">
-        <Button onClick={handleCreateFile} disabled={!csvLoaded || fileCreating}>Create NextBOM working file</Button>
+        <Button onClick={handleCreateFile} disabled={!csvLoaded || fileCreating}>Create NextBOM file</Button>
         {fileCreated && <Check className="ml-2 size-4 text-green-500" />}
       </div>
     </div>
