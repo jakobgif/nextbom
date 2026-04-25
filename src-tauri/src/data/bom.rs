@@ -117,10 +117,17 @@ pub fn parse_csv(csv_path: &Path) -> Result<Vec<BomEntry>, String> {
             return Err("CSV must have at least 2 columns (part ID and designator)".to_string());
         }
 
-        entries.push(BomEntry {
-            designator: record.get(1).unwrap_or("").trim().to_string(),
-            part_id: record.get(0).unwrap_or("").trim().to_string(),
-        });
+        let part_id = record.get(0).unwrap_or("").trim().to_string();
+        let designator = record.get(1).unwrap_or("").trim().to_string();
+
+        if part_id.is_empty() || designator.is_empty() {
+            return Err(format!(
+                "Row {} has an empty value; both part ID and designator are required",
+                entries.len() + 1
+            ));
+        }
+
+        entries.push(BomEntry { designator, part_id });
     }
 
     Ok(entries)
@@ -340,6 +347,24 @@ mod tests {
         let result = parse_csv(&path);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("at least 2 columns"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn parse_csv_empty_part_id_returns_error() {
+        let path = write_temp_csv("part_id;designator\n;C1\n");
+        let result = parse_csv(&path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty value"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn parse_csv_empty_designator_returns_error() {
+        let path = write_temp_csv("part_id;designator\nCAP_100NF;\n");
+        let result = parse_csv(&path);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("empty value"));
         std::fs::remove_file(path).ok();
     }
 
