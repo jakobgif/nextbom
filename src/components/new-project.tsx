@@ -25,7 +25,6 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
   const [title, setTitle] = useState("");
   const [engineer, setEngineer] = useState("");
   const [projectSpecifics, setProjectSpecifics] = useState("");
-  const [designVariant, setDesignVariant] = useState("");
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -41,8 +40,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
         title: title.trim(),
         engineer: engineer.trim() || null,
         projectSpecifics: projectSpecifics.trim() || null,
-        designVariant: designVariant.trim() || null,
-      });
+        });
       setOpen(false);
     } catch (error: any) {
       console.error("Failed to create project:", error);
@@ -56,7 +54,6 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
       setTitle("");
       setEngineer("");
       setProjectSpecifics("");
-      setDesignVariant("");
     }
   };
 
@@ -103,15 +100,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
               onChange={(e) => setProjectSpecifics(e.target.value)}
             />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label>Design Variant (Optional)</Label>
-            <Input
-              id="design-variant"
-              placeholder="e.g. full, lite"
-              value={designVariant}
-              onChange={(e) => setDesignVariant(e.target.value)}
-            />
-          </div>
+
         </div>
         <DialogFooter>
           <Button

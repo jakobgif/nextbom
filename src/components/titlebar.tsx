@@ -22,7 +22,6 @@ export function Titlebar(){
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
   const [engineerDialogOpen, setEngineerDialogOpen] = useState(false);
-  const [designVariantDialogOpen, setDesignVariantDialogOpen] = useState(false);
   const [partsAlternatives, setPartsAlternatives] = useState<string[]>([]);
 
   useEffect(() => {
@@ -189,7 +188,6 @@ export function Titlebar(){
                     {!project?.database_path && <MenubarItem disabled>No database linked</MenubarItem>}
                   </MenubarSubContent>
                 </MenubarSub>
-                <MenubarItem disabled={!project} onSelect={() => setDesignVariantDialogOpen(true)}>Set Design Variant</MenubarItem>
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
@@ -250,23 +248,6 @@ export function Titlebar(){
           try {
             await invoke("set_project_engineer", { engineer: value });
             setEngineerDialogOpen(false);
-          } catch (error: any) {
-            toast.error(error.toString());
-          }
-        }}
-      />
-      <SetStringDialog
-        open={designVariantDialogOpen}
-        onOpenChange={setDesignVariantDialogOpen}
-        title="Set Design Variant"
-        description="Enter the design variant identifier for this project (e.g. full, lite)."
-        label="Design Variant"
-        placeholder="e.g. full, lite"
-        currentValue={project?.design_variant || ""}
-        onSubmit={async (value) => {
-          try {
-            await invoke("set_design_variant", { designVariant: value });
-            setDesignVariantDialogOpen(false);
           } catch (error: any) {
             toast.error(error.toString());
           }

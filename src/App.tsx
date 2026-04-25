@@ -81,7 +81,7 @@ function App() {
               <AccordionItem value="item-1">
                 <AccordionTrigger>1. Create a nextbom database file</AccordionTrigger>
                 <AccordionContent forceMount>
-                  <CreateNextbomFile />
+                  <CreateNextbomFile key={project.uuid} />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -101,8 +101,11 @@ function App() {
 }
 
 function CreateNextbomFile(){
+  const { project } = useProjectStore();
   const [csvLoaded, setCsvLoaded] = useState(false);
   const [fileCreated, setFileCreated] = useState(false);
+  const [csvPicking, setCsvPicking] = useState(false);
+  const [fileCreating, setFileCreating] = useState(false);
 
   const [pcbNameAuto, setPcbNameAuto] = useState(true);
   const [pcbNameManual, setPcbNameManual] = useState("");
@@ -112,18 +115,23 @@ function CreateNextbomFile(){
   const [version, setVersion] = useState("");
   const [versionError, setVersionError] = useState(false);
 
+  const [designVariant, setDesignVariant] = useState(project?.design_variant ?? "");
+
   const pcbName = pcbNameAuto ? csvFileStem : pcbNameManual;
 
   const handleImportCsv = async () => {
+    setCsvPicking(true);
     try {
-      const { count, filename_stem } = await invoke<{ count: number; filename_stem: string }>("load_csv");
+      const { message, filename_stem } = await invoke<{ message: string; filename_stem: string }>("load_csv");
       setCsvLoaded(true);
       setCsvFileStem(filename_stem);
-      toast.success(`Loaded ${count} entries from CSV`);
+      toast.success(message);
     } catch (error: any) {
       if (error !== "No file selected") {
         toast.error(error.toString());
       }
+    } finally {
+      setCsvPicking(false);
     }
   };
 
@@ -138,10 +146,12 @@ function CreateNextbomFile(){
       return;
     }
     setVersionError(false);
+    setFileCreating(true);
     try {
       const result = await invoke<string>("create_nextbom_file", {
         pcbName,
         version,
+        designVariant,
       });
       setFileCreated(true);
       toast.success(result);
@@ -149,6 +159,8 @@ function CreateNextbomFile(){
       if (error !== "No save location selected") {
         toast.error(error.toString());
       }
+    } finally {
+      setFileCreating(false);
     }
   };
 
@@ -158,7 +170,7 @@ function CreateNextbomFile(){
         <FieldLabel>Select CSV file</FieldLabel>
         <div className="flex flex-row items-center">
           <Tooltip>
-            <TooltipTrigger asChild><Button onClick={handleImportCsv}>Import CSV</Button></TooltipTrigger>
+            <TooltipTrigger asChild><Button onClick={handleImportCsv} disabled={csvPicking}>Import CSV</Button></TooltipTrigger>
             <TooltipContent className="select-none">
               <p>
                 CSV format:<br />
@@ -218,10 +230,24 @@ function CreateNextbomFile(){
             {versionError && <FieldError className="mt-1">BOM version must be a number</FieldError>}
           </div>
         </Field>
+
+        <Field className="w-56">
+          <FieldLabel>Design variant</FieldLabel>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Input
+                placeholder="e.g. full, lite"
+                value={designVariant}
+                onChange={(e) => setDesignVariant(e.target.value)}
+              />
+            </TooltipTrigger>
+            <TooltipContent className="select-none">Identifies which design variant this BOM<br />belongs to. Stored in the project for reuse.</TooltipContent>
+          </Tooltip>
+        </Field>
       </div>
 
       <div className="flex flex-row items-center">
-        <Button onClick={handleCreateFile} disabled={!csvLoaded}>Create NextBOM working file</Button>
+        <Button onClick={handleCreateFile} disabled={!csvLoaded || fileCreating}>Create NextBOM working file</Button>
         {fileCreated && <Check className="ml-2 size-4 text-green-500" />}
       </div>
     </div>
