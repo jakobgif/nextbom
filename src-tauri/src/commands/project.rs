@@ -547,6 +547,11 @@ pub async fn create_nextbom_file(
         None => return Err("No save location selected".to_string()),
     };
 
+    if Path::new(&db_path).exists() {
+        std::fs::remove_file(&db_path)
+            .map_err(|e| format!("Failed to overwrite existing file: {}", e))?;
+    }
+
     let conn = create_database(Path::new(&db_path))
         .map_err(|e| format!("Failed to create database: {}", e))?;
 
