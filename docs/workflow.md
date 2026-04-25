@@ -20,7 +20,7 @@ RES00001;R1
 - The header row is skipped automatically.
 - Leading and trailing whitespace is trimmed from both columns.
 
-After a successful import, nextbom shows how many entries were loaded and uses the CSV filename as a default PCBA name.
+After a successful import, nextbom shows how many entries were loaded.
 
 !!! tip
     Most EDA tools (KiCad, Altium, etc.) can export a BOM as CSV. You may need to configure the delimiter and column order to match the format above.
@@ -33,7 +33,7 @@ After a successful import, nextbom shows how many entries were loaded and uses t
 Before creating the database, set these fields:
 
 **PCBA Name**
-: The name of the printed circuit board assembly. Defaults to the CSV filename stem but can be edited freely. Stored as metadata in the generated database.
+: The name of the printed circuit board assembly. Defaults to the project title (Auto mode) but can be edited freely by unchecking **Auto**. Stored as metadata in the generated database.
 
 **BOM Version**
 : A numeric version identifier for this BOM (digits only). Stored as metadata alongside the PCBA name and design variant.
