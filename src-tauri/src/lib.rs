@@ -72,6 +72,7 @@ pub fn run() {
             commands::set_database_path,
             commands::load_csv,
             commands::create_nextbom_file,
+            commands::resolve_bom_manufacturers,
             commands::get_recent_projects,
             commands::remove_recent_project,
             commands::clear_recent_projects,

@@ -1,4 +1,4 @@
-use crate::data::{create_database, insert_bom_entries, insert_metadata, parse_csv, Metadata, Project, ProjectState, RecentProject, RecentProjects};
+use crate::data::{create_database, insert_bom_entries, insert_metadata, parse_csv, resolve_bom_entries, Metadata, Project, ProjectState, RecentProject, RecentProjects};
 use crate::AppState;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -574,6 +574,55 @@ pub async fn create_nextbom_file(
     }
 
     Ok(format!("Successfully created NextBOM file with {} entries", entries.len()))
+}
+
+// ── BOM resolution commands ───────────────────────────────────────────────────
+
+/// Presents a file-open dialog to select a `.nextbom` working file, then resolves every BOM
+/// entry against the parts database linked to the open project.
+///
+/// Migrates the `.nextbom` schema to add `mfr`, `mpn`, `alt_mfr`, and `alt_mpn` columns, then
+/// populates them with JSON arrays built from the `parts` table (and the project-specific
+/// `alt_*` table, if set).
+/// Returns `Ok(())` without changing state if the user cancels the dialog. Returns an error
+/// if no project is open, no parts database is linked, or resolution fails.
+#[tauri::command]
+pub async fn resolve_bom_manufacturers(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let (db_path, project_specifics) = {
+        let inner = state.inner.lock().unwrap();
+        let project = inner.current_project.as_ref()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        let db_path = project.database_path.clone()
+            .ok_or_else(|| "No parts database linked to this project".to_string())?;
+        let specifics = project.project_specifics.clone();
+        (db_path, specifics)
+    };
+
+    let dialog = app.dialog()
+        .file()
+        .set_title("Select NextBOM working file")
+        .add_filter("NextBOM working file", &["nextbom"]);
+
+    let nextbom_path = tauri::async_runtime::spawn_blocking(move || {
+        dialog.blocking_pick_file()
+    }).await.map_err(|e| e.to_string())?;
+
+    let nextbom_path = match nextbom_path {
+        Some(p) => p.to_string(),
+        None => return Err("No file selected".to_string()),
+    };
+
+    let nextbom_conn = rusqlite::Connection::open(&nextbom_path)
+        .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
+    let nextdb_conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open parts database: {}", e))?;
+
+    let count = resolve_bom_entries(&nextbom_conn, &nextdb_conn, project_specifics.as_deref())?;
+
+    Ok(format!("Resolved {} entries", count))
 }
 
 // ── Recent projects commands ──────────────────────────────────────────────────
