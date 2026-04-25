@@ -502,7 +502,10 @@ pub async fn load_csv(app: AppHandle, state: State<'_, AppState>) -> Result<serd
 
     state.inner.lock().unwrap().pending_csv_path = Some(csv_path);
 
-    Ok(serde_json::json!({ "count": entries.len(), "filename_stem": filename_stem }))
+    Ok(serde_json::json!({
+        "message": format!("Imported {} lines from CSV", entries.len()),
+        "filename_stem": filename_stem
+    }))
 }
 
 /// Creates a new `.nextbom` SQLite database from the CSV file previously loaded with `load_csv`.
@@ -517,15 +520,12 @@ pub async fn create_nextbom_file(
     state: State<'_, AppState>,
     pcb_name: String,
     version: String,
+    design_variant: String,
 ) -> Result<String, String> {
-    let (csv_path, design_variant) = {
+    let csv_path = {
         let inner = state.inner.lock().unwrap();
-        let csv_path = inner.pending_csv_path.clone()
-            .ok_or_else(|| "No CSV loaded".to_string())?;
-        let design_variant = inner.current_project.as_ref()
-            .and_then(|p| p.design_variant.clone())
-            .unwrap_or_default();
-        (csv_path, design_variant)
+        inner.pending_csv_path.clone()
+            .ok_or_else(|| "No CSV loaded".to_string())?
     };
 
     let entries = parse_csv(Path::new(&csv_path))?;
@@ -553,10 +553,27 @@ pub async fn create_nextbom_file(
     insert_bom_entries(&conn, &entries)
         .map_err(|e| format!("Failed to insert BOM entries: {}", e))?;
 
-    insert_metadata(&conn, &Metadata { pcb_name, design_variant, version })
+    insert_metadata(&conn, &Metadata { pcb_name, design_variant: design_variant.clone(), version })
         .map_err(|e| format!("Failed to write metadata: {}", e))?;
 
-    Ok(format!("Successfully created database with {} entries: {}", entries.len(), db_path))
+    // Store variant in project so it can be auto-loaded next time
+    let snapshot = {
+        let mut inner = state.inner.lock().unwrap();
+        if inner.current_project.is_some() {
+            let project = inner.current_project.as_mut().unwrap();
+            project.set_design_variant(design_variant);
+            let project_clone = project.clone();
+            inner.has_unsaved_changes = true;
+            Some(ProjectState { project: Some(project_clone), has_unsaved_changes: true })
+        } else {
+            None
+        }
+    };
+    if let Some(snapshot) = snapshot {
+        let _ = app.emit("project-changed", snapshot);
+    }
+
+    Ok(format!("Successfully created NextBOM file with {} entries", entries.len()))
 }
 
 // ── Recent projects commands ──────────────────────────────────────────────────
