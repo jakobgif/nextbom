@@ -30,10 +30,6 @@ design_variant: string | null,
  */
 engineer: string | null, 
 /**
- * Latest BOM version string
- */
-latest_bom_version: string | null, 
-/**
  * Timestamp of the last change (Unix timestamp in milliseconds, UTC)
  * Updates when BOM is created, project file is modified, or any change occurs
  */
