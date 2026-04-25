@@ -12,6 +12,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { SetStringDialog } from "./set-string-dialog";
 import { useProjectStore } from "@/store/project-store";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { getVersion } from "@tauri-apps/api/app";
 
 export function Titlebar(){
   const appWindow = getCurrentWindow();
@@ -23,6 +24,11 @@ export function Titlebar(){
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
   const [engineerDialogOpen, setEngineerDialogOpen] = useState(false);
   const [partsAlternatives, setPartsAlternatives] = useState<string[]>([]);
+  const [appVersion, setAppVersion] = useState<string>("");
+
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => setAppVersion(""));
+  }, []);
 
   useEffect(() => {
     if (!project?.database_path) { setPartsAlternatives([]); return; }
@@ -195,6 +201,8 @@ export function Titlebar(){
                 <p>Help</p>
               </MenubarTrigger>
               <MenubarContent>
+                <MenubarItem disabled>Version {appVersion}</MenubarItem>
+                <MenubarSeparator />
                 <MenubarItem onClick={() => {
                   setTheme(theme === "dark" ? "light" : "dark");
                 }}>Toggle Theme</MenubarItem>
