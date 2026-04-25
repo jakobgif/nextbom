@@ -159,7 +159,7 @@ export function Titlebar(){
             </MenubarMenu>
             <MenubarMenu>
               <MenubarTrigger>
-                <p>Edit</p>
+                <p>Project</p>
               </MenubarTrigger>
               <MenubarContent>
                 <MenubarItem disabled={!project} onSelect={() => setTitleDialogOpen(true)}>Set Title</MenubarItem>
