@@ -534,9 +534,9 @@ pub async fn create_nextbom_file(
 
     let db_dialog = app.dialog()
         .file()
-        .set_title("Save NextBOM database as")
+        .set_title("Save file as")
         .set_file_name(&default_db_name)
-        .add_filter("NextBOM Database", &["nextbom"]);
+        .add_filter("NextBOM working file", &["nextbom"]);
 
     let db_path = tauri::async_runtime::spawn_blocking(move || {
         db_dialog.blocking_save_file()
