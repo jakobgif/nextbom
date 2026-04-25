@@ -109,7 +109,6 @@ function CreateNextbomFile(){
 
   const [pcbNameAuto, setPcbNameAuto] = useState(true);
   const [pcbNameManual, setPcbNameManual] = useState("");
-  const [csvFileStem, setCsvFileStem] = useState("");
   const [pcbNameError, setPcbNameError] = useState(false);
 
   const [version, setVersion] = useState("");
@@ -117,14 +116,13 @@ function CreateNextbomFile(){
 
   const [designVariant, setDesignVariant] = useState(project?.design_variant ?? "");
 
-  const pcbName = pcbNameAuto ? csvFileStem : pcbNameManual;
+  const pcbName = pcbNameAuto ? (project?.title ?? "") : pcbNameManual;
 
   const handleImportCsv = async () => {
     setCsvPicking(true);
     try {
-      const { message, filename_stem } = await invoke<{ message: string; filename_stem: string }>("load_csv");
+      const { message } = await invoke<{ message: string; filename_stem: string }>("load_csv");
       setCsvLoaded(true);
-      setCsvFileStem(filename_stem);
       toast.success(message);
     } catch (error: any) {
       if (error !== "No file selected") {
@@ -205,7 +203,7 @@ function CreateNextbomFile(){
                   <TooltipTrigger asChild>
                     <span><Checkbox checked={pcbNameAuto} onCheckedChange={(v) => { setPcbNameAuto(!!v); if (v) setPcbNameError(false); }} /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="select-none">Derive the name automatically<br />from the CSV filename.</TooltipContent>
+                  <TooltipContent className="select-none">Use the project title as the PCBA name.</TooltipContent>
                 </Tooltip>
                 <p>Auto</p>
               </div>
