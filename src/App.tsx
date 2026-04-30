@@ -13,12 +13,14 @@ import { Checkbox } from "./components/ui/checkbox";
 import { NewProjectDialog } from "./components/new-project";
 import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { useProjectStore } from "./store/project-store";
 import { formatLastChange } from "./lib/utils";
 
 function App() {
   const { project, recentProjects, initialize } = useProjectStore();
   const [pendingNextbomPath, setPendingNextbomPath] = useState("");
+  const [pendingResolvedPath, setPendingResolvedPath] = useState("");
 
   useEffect(() => {
     loadSavedTheme();
@@ -90,7 +92,13 @@ function App() {
               <AccordionItem value="item-2">
                 <AccordionTrigger>2. Resolve Manufacturers &amp; MPNs</AccordionTrigger>
                 <AccordionContent>
-                  <ResolveManufacturers key={project.uuid} pendingNextbomPath={pendingNextbomPath} />
+                  <ResolveManufacturers key={project.uuid} pendingNextbomPath={pendingNextbomPath} onResolved={setPendingResolvedPath} />
+                </AccordionContent>
+              </AccordionItem>
+              <AccordionItem value="item-3">
+                <AccordionTrigger>3. Generate BOM Output</AccordionTrigger>
+                <AccordionContent>
+                  <ExportBom key={project.uuid} pendingResolvedPath={pendingResolvedPath} />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -268,7 +276,7 @@ type ResolvedBomEntry = {
   alt_mpn: string[];
 };
 
-function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: string }) {
+function ResolveManufacturers({ pendingNextbomPath, onResolved }: { pendingNextbomPath?: string; onResolved?: (path: string) => void }) {
   const { project } = useProjectStore();
   const [resolved, setResolved] = useState(false);
   const [nextbomPath, setNextbomPath] = useState("");
@@ -288,6 +296,7 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
       const { message, nextbom_path } = await invoke<{ message: string; nextbom_path: string }>("resolve_bom_manufacturers", { usePending: autoLoad && !!pendingNextbomPath });
       setResolved(true);
       setNextbomPath(nextbom_path);
+      onResolved?.(nextbom_path);
       toast.success(message);
       const entries = await invoke<ResolvedBomEntry[]>("get_resolved_bom", { nextbomPath: nextbom_path });
       setBomEntries(entries);
@@ -386,6 +395,51 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
           </table>
         </div>
       )}
+    </div>
+  );
+}
+
+function ExportBom({ pendingResolvedPath }: { pendingResolvedPath?: string }) {
+  const [autoLoad, setAutoLoad] = useState(true);
+  const [outputPath, setOutputPath] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+      const path = await invoke<string>("export_bom_to_excel", {
+        nextbomPath: autoLoad && pendingResolvedPath ? pendingResolvedPath : null,
+      });
+      setOutputPath(path);
+      toast.success("BOM exported successfully");
+    } catch (error: any) {
+      if (error !== "cancelled") {
+        toast.error(error.toString());
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-start gap-6 ml-5">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="auto-load-3"
+          checked={autoLoad}
+          disabled={!pendingResolvedPath}
+          onCheckedChange={(v) => setAutoLoad(!!v)}
+        />
+        <label htmlFor="auto-load-3" className={`text-sm select-none ${!pendingResolvedPath ? "text-muted-foreground/50" : "cursor-pointer"}`}>
+          Load resolved NextBOM from step 2
+        </label>
+      </div>
+      <div className="flex flex-row items-center">
+        <Button onClick={handleExport} disabled={loading}>Export to Excel</Button>
+        {outputPath && <Check className="ml-2 size-4 text-green-500" />}
+        {outputPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{outputPath}</span>}
+        {outputPath && <Button variant="outline" className="ml-3" onClick={() => openPath(outputPath).catch((e: any) => toast.error(e.toString()))}>Open file</Button>}
+      </div>
     </div>
   );
 }
