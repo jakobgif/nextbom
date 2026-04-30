@@ -19,6 +19,8 @@ This means:
 - Create and manage projects with title, engineer, and project-specifics metadata
 - Import a semicolon-delimited CSV from your EDA tool to load component designators and part IDs
 - Generate a `.nextbom` BOM file from the imported CSV
+- Resolve manufacturers and MPNs from a linked `.nextdb` parts database, including project-specific alternative parts
+- Export the resolved BOM to Excel — either as a plain sheet or by filling a per-project `.xlsx` [BOM template](project.md#bom-templates)
 - Save and reopen projects (`.nbp` files), with recent projects tracked automatically
 
 ## How It Fits Together
@@ -53,4 +55,4 @@ When you generate BOM output, nextbom reads the `.nextbom` working file (designa
 2. [Create a project](project.md) — give it a title, and optionally an engineer name.
 3. [Link your project to a `.nextdb` parts database](project.md#linking-the-parts-database).
 4. [Import your BOM CSV](workflow.md#import-csv) from your schematic tool.
-5. [Create a nextbom BOM file](workflow.md#create-bom-file) from the imported data.
+5. [Create a nextbom BOM file](workflow.md#create-nextbom-file) from the imported data.

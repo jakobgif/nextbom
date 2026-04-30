@@ -11,8 +11,10 @@ Fill in the fields:
 | Field | Required | Description |
 |---|---|---|
 | **Title** | Yes | Human-readable name for the project. Used as the default filename when saving. |
-| **Engineer** | No | Engineer or team responsible. Shown in the status bar. |
-| **Project Specifics ID** | No | Identifier for a set of project-specific alternative parts. Leave blank if you are not using per-project alternatives. |
+| **Engineer** | No | Engineer or team responsible. Shown in the status bar and recorded in every `.nextbom` file you create from this project. |
+| **Parts Database** | No | Browse for the `.nextdb` parts database to link to the project. Can be linked or changed later via **Project → Select Parts Database**. |
+| **Project Specifics** | No | Pick one of the alt-part sets defined in the linked `.nextdb`, or **None**. Disabled until a parts database is selected. |
+| **BOM Template** | No | Browse for an `.xlsx` template that will be filled when you export the BOM. See [BOM Templates](#bom-templates). |
 
 ## Opening a Project
 
@@ -34,8 +36,10 @@ All metadata fields can be changed after creation via the **Project** menu:
 
 - **Project → Set Title**
 - **Project → Set Engineer**
-- **Project → Set Project Specifics**
 - **Project → Select Parts Database** — link or re-link the project to a `.nextdb` parts database file
+- **Project → Set Project Specifics** — pick an alt-set from the linked `.nextdb`, or **None** to clear
+- **Project → Set BOM Template** — pick an `.xlsx` file to use as the export template
+- **Project → Clear BOM Template** — only shown when a template is set; reverts to the default sheet layout
 
 The design variant is not set here — it is entered when [creating a BOM working file](workflow.md#configure-bom) and automatically stored in the project for reuse next time.
 
@@ -50,6 +54,16 @@ Use **Project → Select Parts Database** to choose or change the linked `.nextd
 If you don't have a `.nextdb` file yet, you'll need to create it separately or obtain one from your organization.
 
 You can change which parts database is linked at any time.
+
+## BOM Templates {#bom-templates}
+
+A project can optionally point to an `.xlsx` file that nextbom uses as a template when [exporting the BOM](workflow.md#generate-output). The template is filled in place: scalar placeholders (PCBA name, BOM version, engineer, …) are substituted everywhere they appear, and a single repeating row holding column placeholders (`?part_id`, `?qty`, …) is expanded into one row per BOM line.
+
+When no template is set, nextbom writes a plain BOM sheet with a default column order.
+
+Set or change the template via **Project → Set BOM Template**. To go back to the default layout, use **Project → Clear BOM Template**. The template path is stored in the `.nbp` project file.
+
+For the full list of placeholder keys and how they are expanded, see [BOM template placeholders](workflow.md#bom-template-placeholders).
 
 ## Closing a Project
 
