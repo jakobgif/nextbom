@@ -808,7 +808,7 @@ pub async fn export_bom_to_excel(
             .unwrap_or_else(|_| (String::new(), String::new(), String::new(), String::new(), 0, "bom.xlsx".to_string()));
 
         let creation_date = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(csv_imported_at)
-            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .map(|dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S").to_string())
             .unwrap_or_default();
 
         let entries = read_resolved_bom(&conn)
