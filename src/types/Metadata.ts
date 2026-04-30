@@ -19,4 +19,12 @@ design_variant: string,
 /**
  * BOM revision number (e.g. `"1"`, `"2"`).
  */
-version: string, };
+bom_version: string, 
+/**
+ * Absolute path to the CSV file that was imported to create this BOM.
+ */
+source_csv_path: string, 
+/**
+ * Unix timestamp in milliseconds when the CSV was parsed.
+ */
+csv_imported_at: bigint, };

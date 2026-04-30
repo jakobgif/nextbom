@@ -34,7 +34,13 @@ pub struct Metadata {
     pub design_variant: String,
 
     /// BOM revision number (e.g. `"1"`, `"2"`).
-    pub version: String,
+    pub bom_version: String,
+
+    /// Absolute path to the CSV file that was imported to create this BOM.
+    pub source_csv_path: String,
+
+    /// Unix timestamp in milliseconds when the CSV was parsed.
+    pub csv_imported_at: i64,
 }
 
 /// Opens (or creates) a SQLite database at `path` and ensures the `bom` and `metadata` schemas
@@ -56,10 +62,15 @@ pub fn create_database(path: &Path) -> SqliteResult<Connection> {
     // Single-row constraint: only one metadata record is allowed per database.
     conn.execute(
         "CREATE TABLE IF NOT EXISTS metadata (
-            id             INTEGER PRIMARY KEY CHECK (id = 1),
-            pcb_name       TEXT NOT NULL,
-            design_variant TEXT NOT NULL,
-            version        TEXT NOT NULL
+            id               INTEGER PRIMARY KEY CHECK (id = 1),
+            pcb_name         TEXT NOT NULL,
+            design_variant   TEXT NOT NULL,
+            bom_version      TEXT NOT NULL,
+            source_csv_path  TEXT NOT NULL,
+            csv_imported_at  INTEGER NOT NULL,
+            project_specifics TEXT,
+            database_path    TEXT,
+            database_version TEXT
         )",
         [],
     )?;
@@ -72,9 +83,34 @@ pub fn create_database(path: &Path) -> SqliteResult<Connection> {
 /// Replaces any existing row (there can only be one). Returns an error if the insert fails.
 pub fn insert_metadata(conn: &Connection, metadata: &Metadata) -> SqliteResult<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO metadata (id, pcb_name, design_variant, version)
-         VALUES (1, ?1, ?2, ?3)",
-        rusqlite::params![metadata.pcb_name, metadata.design_variant, metadata.version],
+        "INSERT OR REPLACE INTO metadata (id, pcb_name, design_variant, bom_version, source_csv_path, csv_imported_at)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+        rusqlite::params![
+            metadata.pcb_name,
+            metadata.design_variant,
+            metadata.bom_version,
+            metadata.source_csv_path,
+            metadata.csv_imported_at,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Updates the resolution columns of the single metadata row: which alternative set was used,
+/// which database file was queried, and what version that database reports.
+///
+/// Called after [`resolve_bom_entries`] completes. All three values are nullable — pass `None`
+/// when the information is unavailable (e.g. no `project_specifics` set, or the database has
+/// no metadata table).
+pub fn update_resolution_metadata(
+    conn: &Connection,
+    database_path: &str,
+    project_specifics: Option<&str>,
+    database_version: Option<&str>,
+) -> SqliteResult<()> {
+    conn.execute(
+        "UPDATE metadata SET database_path = ?1, project_specifics = ?2, database_version = ?3 WHERE id = 1",
+        rusqlite::params![database_path, project_specifics, database_version],
     )?;
     Ok(())
 }
@@ -496,5 +532,44 @@ mod tests {
         assert_eq!(mfr, r#"["TDK","Murata"]"#);
         assert_eq!(mpn, r#"["C0402X5R","GRM0332"]"#);
         assert_eq!(alt_mfr.as_deref(), Some("[]"));
+    }
+
+    #[test]
+    fn resolve_bom_entries_populates_alt_columns_when_project_specifics_set() {
+        let nextbom = Connection::open_in_memory().unwrap();
+        let nextdb = Connection::open_in_memory().unwrap();
+        make_nextbom(&nextbom);
+        make_nextdb(&nextdb);
+        nextdb.execute_batch(
+            "CREATE TABLE alt_2025 (ID TEXT, mfr TEXT, mpn TEXT);
+             INSERT INTO alt_2025 VALUES ('RES00100', 'Vishay', 'CRCW0402');",
+        ).unwrap();
+
+        let count = resolve_bom_entries(&nextbom, &nextdb, Some("2025")).unwrap();
+        assert_eq!(count, 2);
+
+        // R1 has an alt entry — alt columns should be populated and part_id suffixed
+        let part_id: String = nextbom
+            .query_row("SELECT part_id FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
+            .unwrap();
+        let alt_mfr: String = nextbom
+            .query_row("SELECT alt_mfr FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
+            .unwrap();
+        let alt_mpn: String = nextbom
+            .query_row("SELECT alt_mpn FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(part_id, "RES00100_2025");
+        assert_eq!(alt_mfr, r#"["Vishay"]"#);
+        assert_eq!(alt_mpn, r#"["CRCW0402"]"#);
+
+        // C1 has no alt entry — alt columns should be empty arrays, part_id unchanged
+        let part_id: String = nextbom
+            .query_row("SELECT part_id FROM bom WHERE designator = 'C1'", [], |r| r.get(0))
+            .unwrap();
+        let alt_mfr: String = nextbom
+            .query_row("SELECT alt_mfr FROM bom WHERE designator = 'C1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(part_id, "CAP00100");
+        assert_eq!(alt_mfr, r#"[]"#);
     }
 }

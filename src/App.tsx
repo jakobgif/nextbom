@@ -154,7 +154,7 @@ function CreateNextbomFile(){
     try {
       const result = await invoke<string>("create_nextbom_file", {
         pcbName,
-        version,
+        bomVersion: version,
         designVariant,
       });
       setFileCreated(true);

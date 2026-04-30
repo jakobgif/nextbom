@@ -1,4 +1,4 @@
-use crate::data::{create_database, insert_bom_entries, insert_metadata, parse_csv, resolve_bom_entries, Metadata, Project, ProjectState, RecentProject, RecentProjects};
+use crate::data::{create_database, insert_bom_entries, insert_metadata, list_alt_tables, parse_csv, read_nextdb_metadata, resolve_bom_entries, update_resolution_metadata, Metadata, Project, ProjectState, RecentProject, RecentProjects};
 use crate::AppState;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -381,17 +381,10 @@ pub fn get_parts_tables(state: State<AppState>) -> Result<Vec<String>, String> {
     let conn = rusqlite::Connection::open(&db_path)
         .map_err(|e| format!("Failed to open parts database: {}", e))?;
 
-    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'alt_%' ORDER BY name")
-        .map_err(|e| format!("Failed to query tables: {}", e))?;
-
-    let tables: Result<Vec<String>, _> = stmt.query_map([], |row| row.get(0))
-        .map_err(|e| format!("Failed to read tables: {}", e))?
-        .collect();
-
-    tables.map_err(|e| format!("Failed to read table name: {}", e))
+    list_alt_tables(&conn)
 }
 
-/// Returns the `alt_*` table names from a parts database file at the given path.
+/// Returns the project-specifics identifiers from a parts database file at the given path.
 ///
 /// Used when creating a new project before any project is open.
 #[tauri::command]
@@ -399,14 +392,7 @@ pub fn get_parts_tables_from_path(database_path: String) -> Result<Vec<String>, 
     let conn = rusqlite::Connection::open(&database_path)
         .map_err(|e| format!("Failed to open parts database: {}", e))?;
 
-    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'alt_%' ORDER BY name")
-        .map_err(|e| format!("Failed to query tables: {}", e))?;
-
-    let tables: Result<Vec<String>, _> = stmt.query_map([], |row| row.get(0))
-        .map_err(|e| format!("Failed to read tables: {}", e))?
-        .collect();
-
-    tables.map_err(|e| format!("Failed to read table name: {}", e))
+    list_alt_tables(&conn)
 }
 
 /// Sets the project-specifics identifier of the open project, marks it as unsaved, and emits
@@ -544,7 +530,7 @@ pub async fn create_nextbom_file(
     app: AppHandle,
     state: State<'_, AppState>,
     pcb_name: String,
-    version: String,
+    bom_version: String,
     design_variant: String,
 ) -> Result<String, String> {
     let csv_path = {
@@ -583,7 +569,18 @@ pub async fn create_nextbom_file(
     insert_bom_entries(&conn, &entries)
         .map_err(|e| format!("Failed to insert BOM entries: {}", e))?;
 
-    insert_metadata(&conn, &Metadata { pcb_name, design_variant: design_variant.clone(), version })
+    let csv_imported_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    insert_metadata(&conn, &Metadata {
+        pcb_name,
+        design_variant: design_variant.clone(),
+        bom_version,
+        source_csv_path: csv_path.clone(),
+        csv_imported_at,
+    })
         .map_err(|e| format!("Failed to write metadata: {}", e))?;
 
     // Store variant in project so it can be auto-loaded next time
@@ -650,7 +647,13 @@ pub async fn resolve_bom_manufacturers(
     let nextdb_conn = rusqlite::Connection::open(&db_path)
         .map_err(|e| format!("Failed to open parts database: {}", e))?;
 
+    let nextdb_meta = read_nextdb_metadata(&nextdb_conn)?;
+    let database_version = nextdb_meta.as_ref().map(|m| m.database_version.as_str());
+
     let count = resolve_bom_entries(&nextbom_conn, &nextdb_conn, project_specifics.as_deref())?;
+
+    update_resolution_metadata(&nextbom_conn, &db_path, project_specifics.as_deref(), database_version)
+        .map_err(|e| format!("Failed to update resolution metadata: {}", e))?;
 
     Ok(format!("Resolved {} entries", count))
 }
