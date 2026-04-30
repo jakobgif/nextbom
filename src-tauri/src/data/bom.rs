@@ -398,11 +398,230 @@ pub fn group_for_excel(entries: &[ResolvedBomEntry]) -> Vec<ExcelBomRow> {
                 qty: designators.len(),
                 part_id,
                 designators,
-                mfr: all_mfr.join("; "),
-                mpn: all_mpn.join("; "),
+                mfr: all_mfr.join("\n"),
+                mpn: all_mpn.join("\n"),
             }
         })
         .collect()
+}
+
+// ── Excel export ─────────────────────────────────────────────────────────────
+
+/// Column keys that define repeating data rows in a BOM template.
+const COLUMN_KEYS: &[&str] = &["?no", "?part_id", "?designators", "?qty", "?mfr", "?mpn"];
+
+/// Scalar keys that are replaced once anywhere in a BOM template.
+const SCALAR_KEYS: &[&str] = &["?pcb_name", "?bom_version", "?design_variant", "?engineer", "?creation_date"];
+
+/// Finds all `?word` tokens in `s` (where word is `[a-zA-Z_]+`).
+fn find_template_keys(s: &str) -> Vec<String> {
+    let mut keys = Vec::new();
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'?' {
+            let start = i;
+            i += 1;
+            while i < bytes.len() && (bytes[i].is_ascii_alphabetic() || bytes[i] == b'_') {
+                i += 1;
+            }
+            if i > start + 1 {
+                keys.push(s[start..i].to_string());
+            }
+        } else {
+            i += 1;
+        }
+    }
+    keys
+}
+
+/// Replaces all known template keys in `s` with their values.
+///
+/// Column keys are replaced with the corresponding field from `bom_row` when provided,
+/// or cleared to `""` when `bom_row` is `None`. Scalar keys are always substituted.
+fn apply_template_cell(
+    s: &str,
+    bom_row: Option<(&ExcelBomRow, usize)>,
+    pcb_name: &str,
+    bom_version: &str,
+    design_variant: &str,
+    engineer: &str,
+    creation_date: &str,
+) -> String {
+    let s = s
+        .replace("?pcb_name", pcb_name)
+        .replace("?bom_version", bom_version)
+        .replace("?design_variant", design_variant)
+        .replace("?engineer", engineer)
+        .replace("?creation_date", creation_date);
+
+    match bom_row {
+        Some((row, no)) => s
+            .replace("?no", &no.to_string())
+            .replace("?part_id", &row.part_id)
+            .replace("?designators", &row.designators.join("; "))
+            .replace("?qty", &row.qty.to_string())
+            .replace("?mfr", &row.mfr)
+            .replace("?mpn", &row.mpn),
+        None => {
+            let mut s = s;
+            for key in COLUMN_KEYS {
+                s = s.replace(key, "");
+            }
+            s
+        }
+    }
+}
+
+/// Generates a default (no-template) BOM `.xlsx` file at `path`.
+///
+/// Writes a header row followed by one data row per entry in `rows`.
+pub fn write_default_xlsx(path: &std::path::Path, rows: &[ExcelBomRow]) -> Result<(), String> {
+    let mut book = umya_spreadsheet::new_file();
+    let sheet = book.get_sheet_mut(&0usize).ok_or("Failed to get worksheet")?;
+
+    for (col, header) in ["part_id", "designators", "qty", "mfr", "mpn"].iter().enumerate() {
+        sheet.get_cell_mut((col as u32 + 1, 1)).set_value(*header);
+    }
+
+    for (i, row) in rows.iter().enumerate() {
+        let r = i as u32 + 2;
+        sheet.get_cell_mut((1u32, r)).set_value(&row.part_id);
+        sheet.get_cell_mut((2u32, r)).set_value(row.designators.join("; "));
+        sheet.get_cell_mut((3u32, r)).set_value_number(row.qty as f64);
+        sheet.get_cell_mut((4u32, r)).set_value(&row.mfr);
+        sheet.get_cell_mut((5u32, r)).set_value(&row.mpn);
+        // qty is numeric → right-aligned by default; mpn must always be left-aligned
+        for col in [3u32, 5u32] {
+            sheet.get_style_mut((col, r))
+                .get_alignment_mut()
+                .set_horizontal(umya_spreadsheet::structs::HorizontalAlignmentValues::Left);
+        }
+    }
+
+    umya_spreadsheet::writer::xlsx::write(&book, path).map_err(|e| e.to_string())
+}
+
+/// Applies BOM data to an Excel template and returns the modified workbook.
+///
+/// Scans all cells for `?key` tokens. Scalar keys (`?pcb_name`, `?bom_version`,
+/// `?design_variant`) are substituted in-place. The row containing column keys
+/// (`?part_id`, `?designators`, `?qty`, `?mfr`, `?mpn`) is replaced by one row per
+/// BOM entry, with additional rows inserted to make room. Returns an error if any
+/// unrecognised `?key` token is found or if the template contains no column keys.
+pub fn apply_bom_template(
+    template_path: &std::path::Path,
+    rows: &[ExcelBomRow],
+    pcb_name: &str,
+    bom_version: &str,
+    design_variant: &str,
+    engineer: &str,
+    creation_date: &str,
+) -> Result<umya_spreadsheet::Spreadsheet, String> {
+    let mut book = umya_spreadsheet::reader::xlsx::read(template_path)
+        .map_err(|e| format!("Failed to read template: {}", e))?;
+
+    // Collect original cell data and header/footer strings before any modifications.
+    let (cell_data, header_str, footer_str): (Vec<(u32, u32, String)>, String, String) = {
+        let sheet = book.get_sheet(&0usize).ok_or("Template has no worksheets")?;
+        let (max_col, max_row) = sheet.get_highest_column_and_row();
+        let mut cells = Vec::new();
+        for row in 1..=max_row {
+            for col in 1..=max_col {
+                if let Some(cell) = sheet.get_cell((col, row)) {
+                    let v = cell.get_value().to_string();
+                    if !v.is_empty() {
+                        cells.push((row, col, v));
+                    }
+                }
+            }
+        }
+        let hf = sheet.get_header_footer();
+        let header = hf.get_odd_header().get_value().to_string();
+        let footer = hf.get_odd_footer().get_value().to_string();
+        (cells, header, footer)
+    };
+
+    // Validate all keys and locate the column-key row.
+    let mut template_row: Option<u32> = None;
+    for (row, _col, val) in &cell_data {
+        for key in find_template_keys(val) {
+            if COLUMN_KEYS.contains(&key.as_str()) {
+                match template_row {
+                    Some(r) if r != *row => return Err(format!(
+                        "Column keys must all be in the same row (found in rows {} and {})", r, row
+                    )),
+                    _ => template_row = Some(*row),
+                }
+            } else if !SCALAR_KEYS.contains(&key.as_str()) {
+                return Err(format!("Unknown template key: {}", key));
+            }
+        }
+    }
+    for s in [&header_str, &footer_str] {
+        for key in find_template_keys(s) {
+            if !COLUMN_KEYS.contains(&key.as_str()) && !SCALAR_KEYS.contains(&key.as_str()) {
+                return Err(format!("Unknown template key: {}", key));
+            }
+        }
+    }
+    let tmpl_row = template_row.ok_or(
+        "Template must contain at least one column key: ?no, ?part_id, ?designators, ?qty, ?mfr, ?mpn"
+    )?;
+
+    // Apply scalar substitutions to all non-template-row cells.
+    {
+        let sheet = book.get_sheet_mut(&0usize).unwrap();
+        for (row, col, val) in &cell_data {
+            if *row != tmpl_row {
+                let new_val = apply_template_cell(val, None, pcb_name, bom_version, design_variant, engineer, creation_date);
+                if new_val != *val {
+                    sheet.get_cell_mut((*col, *row)).set_value(new_val);
+                }
+            }
+        }
+        // Apply scalar substitutions to header and footer.
+        let new_header = apply_template_cell(&header_str, None, pcb_name, bom_version, design_variant, engineer, creation_date);
+        let new_footer = apply_template_cell(&footer_str, None, pcb_name, bom_version, design_variant, engineer, creation_date);
+        sheet.get_header_footer_mut().get_odd_header_mut().set_value(new_header);
+        sheet.get_header_footer_mut().get_odd_footer_mut().set_value(new_footer);
+    }
+
+    // Insert extra rows to make room for BOM data (inserts N-1 rows after the template row).
+    if rows.len() > 1 {
+        let sheet = book.get_sheet_mut(&0usize).unwrap();
+        sheet.insert_new_row(&(tmpl_row + 1), &((rows.len() - 1) as u32));
+    }
+
+    // Write BOM rows into the sheet, starting at tmpl_row.
+    // Each BOM row fills columns that originally contained a column key; other
+    // columns in the template row are preserved (with scalar substitutions applied).
+    let write_targets: Vec<(u32, Option<(&ExcelBomRow, usize)>)> = if rows.is_empty() {
+        vec![(tmpl_row, None)]
+    } else {
+        rows.iter().enumerate().map(|(i, r)| (tmpl_row + i as u32, Some((r, i + 1)))).collect()
+    };
+
+    for (target_row, bom_row) in write_targets {
+        let sheet = book.get_sheet_mut(&0usize).unwrap();
+        // Use original template-row cell values as the source for substitution.
+        for (orig_row, col, val) in &cell_data {
+            if *orig_row == tmpl_row {
+                let new_val =
+                    apply_template_cell(val, bom_row, pcb_name, bom_version, design_variant, engineer, creation_date);
+                // Left-align: numeric values (auto right-aligned by Excel) and MPN column.
+                let needs_left = new_val.parse::<f64>().is_ok() || val.contains("?mpn");
+                sheet.get_cell_mut((*col, target_row)).set_value(new_val);
+                if needs_left {
+                    sheet.get_style_mut((*col, target_row))
+                        .get_alignment_mut()
+                        .set_horizontal(umya_spreadsheet::structs::HorizontalAlignmentValues::Left);
+                }
+            }
+        }
+    }
+
+    Ok(book)
 }
 
 /// Reads all rows from the `bom` table of `conn`, returning them as [`ResolvedBomEntry`]
@@ -724,8 +943,8 @@ mod tests {
             alt_mpn: vec!["CRCW0402".into()],
         }];
         let rows = group_for_excel(&entries);
-        assert_eq!(rows[0].mfr, "Yageo; Vishay");
-        assert_eq!(rows[0].mpn, "RC0402; CRCW0402");
+        assert_eq!(rows[0].mfr, "Yageo\nVishay");
+        assert_eq!(rows[0].mpn, "RC0402\nCRCW0402");
     }
 
     #[test]
