@@ -1,10 +1,12 @@
 # BOM Workflow
 
-Once a project is open, the main screen shows a step-by-step workflow for creating a nextbom database from your schematic data.
+Once a project is open, the main screen shows a three-step workflow for creating a BOM from your schematic data.
 
-## Step 1: Import a CSV {#import-csv}
+## Step 1: Create a NextBOM file {#create-nextbom-file}
 
-Click **Import CSV** to load a BOM export from your EDA tool.
+### Import a CSV
+
+Click **Import CSV file** to load a BOM export from your EDA tool.
 
 nextbom expects a **semicolon-delimited** CSV with a header row. The column order is:
 
@@ -20,17 +22,14 @@ RES00001;R1
 - The header row is skipped automatically.
 - Leading and trailing whitespace is trimmed from both columns.
 
-After a successful import, nextbom shows how many entries were loaded.
+After a successful import, nextbom shows the file path and a checkmark.
 
 !!! tip
     Most EDA tools (KiCad, Altium, etc.) can export a BOM as CSV. You may need to configure the delimiter and column order to match the format above.
 
-!!! note "Prerequisite"
-    Before proceeding, make sure your project is [linked to a `.nextdb` parts database](project.md#linking-the-parts-database).
+### Configure the BOM
 
-## Step 2: Configure the BOM {#configure-bom}
-
-Before creating the database, set these fields:
+Before creating the file, set these fields:
 
 **PCBA Name**
 : The name of the printed circuit board assembly. Defaults to the project title (Auto mode) but can be edited freely by unchecking **Auto**. Stored as metadata in the generated database.
@@ -41,24 +40,50 @@ Before creating the database, set these fields:
 **Design Variant**
 : Identifies which assembly variant this BOM belongs to — for example `full` or `lite`. Pre-populated from the last value used in this project. After the file is created, the value is saved back to the project so it loads automatically next time.
 
-## Step 3: Create the BOM Working File {#create-bom-file}
+### Save the file
 
-Click **Create nextbom BOM file**. A file picker opens so you can choose where to save the `.nextbom` working file.
+Click **Create NextBOM file**. A file picker opens so you can choose where to save the `.nextbom` working file.
 
 The generated file is a SQLite working file containing:
 
 - A `bom` table with one row per component: `designator` (primary key) → `part_id`
 
-This file is used internally to generate the final BOM output. It is not directly linked to your project — only the `.nextdb` parts database is linked to the project.
-
 See [File Formats](file-formats.md#nextbom-working-files) for details.
 
-<!-- ## Step 4: Generate BOM Output
+## Step 2: Resolve Manufacturers & MPNs {#resolve-manufacturers}
 
-Once a `.nextbom` working file is created, you can generate the final BOM output (Excel format). 
+This step looks up each part ID in the linked `.nextdb` parts database and writes the resolved manufacturer name and MPN back into the `.nextbom` file.
 
-The app reads the `.nextbom` file to get each designator and its generic part ID, then looks up the manufacturer part number in the linked `.nextdb` parts database.
+!!! note "Prerequisite"
+    Before proceeding, make sure your project is [linked to a `.nextdb` parts database](project.md#linking-the-parts-database).
 
-The output is an Excel table ready for procurement or manufacturing.
+By default, **Load NextBOM from step 1** is checked and the file from Step 1 is used automatically. Uncheck it to select a different `.nextbom` file manually.
 
-See [File Formats](file-formats.md) to understand how these files work together. -->
+Click **Resolve**. nextbom:
+
+1. Opens the linked parts database
+2. Queries each unique part ID against the `parts` table
+3. If a project-specific alternative set is configured, also queries the matching `alt_*` table
+4. Writes the results (`mfr`, `mpn`, `alt_mfr`, `alt_mpn`) back into the `.nextbom` file
+
+After resolution, a preview table shows all resolved rows grouped by part ID, including any alternative manufacturer and MPN columns when alternatives are present.
+
+## Step 3: Generate BOM Output {#generate-output}
+
+Click **Export to Excel** to export the resolved BOM to an `.xlsx` file.
+
+By default, **Load resolved NextBOM from step 2** is checked and the file from Step 2 is used automatically. Uncheck it to select a different `.nextbom` file manually.
+
+A save-file dialog opens so you can choose where to save the output. The default filename is derived from the PCBA name and BOM version stored in the working file (e.g. `myboard_v2.xlsx`).
+
+After a successful export, the output path is shown and an **Open file** button opens it directly in your system's default spreadsheet application.
+
+The exported file contains one row per part ID with the following columns:
+
+| Column | Contents |
+|--------|----------|
+| `part_id` | The generic part identifier |
+| `designators` | All schematic designators using this part, separated by `; ` |
+| `qty` | Number of placements |
+| `mfr` | Primary manufacturer(s) followed by any alternatives, separated by `; ` |
+| `mpn` | Primary MPN(s) followed by any alternative MPNs, separated by `; ` |
