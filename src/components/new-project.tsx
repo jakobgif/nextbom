@@ -95,7 +95,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
 
   const specificsOptions = [
     { value: "", label: "None" },
-    ...availableSpecifics.map((t) => ({ value: t, label: t.replace(/^alt_/, "") })),
+    ...availableSpecifics.map((t) => ({ value: t, label: t })),
   ];
 
   const selectedLabel = specificsOptions.find((o) => o.value === projectSpecifics)?.label ?? "None";

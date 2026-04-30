@@ -189,7 +189,7 @@ export function Titlebar(){
                       <MenubarItem key={table} onSelect={async () => {
                         try { await invoke("set_project_specifics", { projectSpecifics: table }); }
                         catch (e: any) { toast.error(e.toString()); }
-                      }}>{table.replace(/^alt_/, "")}</MenubarItem>
+                      }}>{table}</MenubarItem>
                     ))}
                     {!project?.database_path && <MenubarItem disabled>No database linked</MenubarItem>}
                   </MenubarSubContent>
