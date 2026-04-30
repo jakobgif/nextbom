@@ -334,7 +334,7 @@ function ResolveManufacturers({ pendingNextbomPath, onResolved }: { pendingNextb
       <div className="flex items-center gap-2">
         <Checkbox
           id="auto-load"
-          checked={autoLoad}
+          checked={autoLoad && !!pendingNextbomPath}
           disabled={!pendingNextbomPath}
           onCheckedChange={(v) => setAutoLoad(!!v)}
         />
@@ -426,7 +426,7 @@ function ExportBom({ pendingResolvedPath }: { pendingResolvedPath?: string }) {
       <div className="flex items-center gap-2">
         <Checkbox
           id="auto-load-3"
-          checked={autoLoad}
+          checked={autoLoad && !!pendingResolvedPath}
           disabled={!pendingResolvedPath}
           onCheckedChange={(v) => setAutoLoad(!!v)}
         />
