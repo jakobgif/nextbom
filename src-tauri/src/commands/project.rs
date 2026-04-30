@@ -1,4 +1,4 @@
-use crate::data::{create_database, group_for_excel, insert_bom_entries, insert_metadata, list_alt_tables, parse_csv, read_nextdb_metadata, read_resolved_bom, resolve_bom_entries, update_resolution_metadata, Metadata, Project, ProjectState, RecentProject, RecentProjects, ResolvedBomEntry};
+use crate::data::{apply_bom_template, create_database, group_for_excel, insert_bom_entries, insert_metadata, list_alt_tables, parse_csv, read_nextdb_metadata, read_resolved_bom, resolve_bom_entries, update_resolution_metadata, write_default_xlsx, Metadata, Project, ProjectState, RecentProject, RecentProjects, ResolvedBomEntry};
 use crate::AppState;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -734,14 +734,13 @@ pub fn get_resolved_bom(nextbom_path: String) -> Result<Vec<ResolvedBomEntry>, S
 /// Exports the resolved BOM from a `.nextbom` file to an Excel `.xlsx` file.
 ///
 /// When `nextbom_path` is `None`, presents a file-open dialog to select the input file.
-/// Always presents a save-file dialog to choose the output location. Returns `Err("cancelled")`
-/// if the user dismisses either dialog. On success, returns the path of the exported file.
-///
-/// Rows are grouped by `part_id` (one row per part), with all designators joined by `"; "`.
-/// The `mfr` and `mpn` columns contain primary values followed by alternatives, all in one cell.
+/// If the open project has a `bom_template_path` set, the template is filled with BOM data;
+/// otherwise a default blank-sheet layout is generated. Always presents a save-file dialog.
+/// Returns `Err("cancelled")` if the user dismisses either dialog.
 #[tauri::command]
 pub async fn export_bom_to_excel(
     app: AppHandle,
+    state: State<'_, AppState>,
     nextbom_path: Option<String>,
 ) -> Result<String, String> {
     // Resolve input path — open file picker if not provided
@@ -764,24 +763,39 @@ pub async fn export_bom_to_excel(
         }
     };
 
-    // Read BOM data and build grouped rows (all sync, no async across this block)
-    let (default_filename, groups) = {
+    // Read BOM data and project settings (all sync before any await)
+    let (default_filename, rows, template_path, pcb_name, bom_version, design_variant, engineer) = {
         let conn = rusqlite::Connection::open(&nextbom_path)
             .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
 
-        let default_filename = conn
+        let (pcb_name, bom_version, design_variant, default_filename) = conn
             .query_row(
-                "SELECT pcb_name, bom_version FROM metadata WHERE id = 1",
+                "SELECT pcb_name, bom_version, design_variant FROM metadata WHERE id = 1",
                 [],
-                |row| Ok(format!("{}_v{}.xlsx", row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                |row| Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                )),
             )
-            .unwrap_or_else(|_| "bom.xlsx".to_string());
+            .map(|(n, v, d)| {
+                let filename = format!("{}_v{}.xlsx", n, v);
+                (n, v, d, filename)
+            })
+            .unwrap_or_else(|_| (String::new(), String::new(), String::new(), "bom.xlsx".to_string()));
 
         let entries = read_resolved_bom(&conn)
             .map_err(|e| format!("Failed to read BOM: {}", e))?;
+        let rows = group_for_excel(&entries);
 
-        (default_filename, group_for_excel(&entries))
+        let guard = state.inner.lock().unwrap();
+        let template_path = guard.current_project.as_ref().and_then(|p| p.bom_template_path.clone());
+        let engineer = guard.current_project.as_ref().and_then(|p| p.engineer.clone()).unwrap_or_default();
+
+        (default_filename, rows, template_path, pcb_name, bom_version, design_variant, engineer)
     };
+
+    let creation_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     // Save-file dialog
     let window = app.get_webview_window("main")
@@ -802,28 +816,83 @@ pub async fn export_bom_to_excel(
         None => return Err("cancelled".to_string()),
     };
 
-    // Build Excel workbook
-    let mut workbook = rust_xlsxwriter::Workbook::new();
-    let worksheet = workbook.add_worksheet();
-
-    worksheet.write(0, 0, "part_id").map_err(|e| e.to_string())?;
-    worksheet.write(0, 1, "designators").map_err(|e| e.to_string())?;
-    worksheet.write(0, 2, "qty").map_err(|e| e.to_string())?;
-    worksheet.write(0, 3, "mfr").map_err(|e| e.to_string())?;
-    worksheet.write(0, 4, "mpn").map_err(|e| e.to_string())?;
-
-    for (row_idx, bom_row) in groups.into_iter().enumerate() {
-        let row = (row_idx + 1) as u32;
-        worksheet.write(row, 0, &bom_row.part_id).map_err(|e| e.to_string())?;
-        worksheet.write(row, 1, bom_row.designators.join("; ")).map_err(|e| e.to_string())?;
-        worksheet.write(row, 2, bom_row.qty as u32).map_err(|e| e.to_string())?;
-        worksheet.write(row, 3, &bom_row.mfr).map_err(|e| e.to_string())?;
-        worksheet.write(row, 4, &bom_row.mpn).map_err(|e| e.to_string())?;
+    // Generate the Excel file
+    if let Some(tmpl) = template_path {
+        let book = apply_bom_template(
+            Path::new(&tmpl),
+            &rows,
+            &pcb_name,
+            &bom_version,
+            &design_variant,
+            &engineer,
+            &creation_date,
+        )?;
+        umya_spreadsheet::writer::xlsx::write(&book, Path::new(&save_path))
+            .map_err(|e| e.to_string())?;
+        restore_hf_drawing(Path::new(&tmpl), Path::new(&save_path))?;
+    } else {
+        write_default_xlsx(Path::new(&save_path), &rows)?;
     }
 
-    workbook.save(&save_path).map_err(|e| e.to_string())?;
-
     Ok(save_path)
+}
+
+/// Sets the BOM export template for the open project.
+///
+/// Presents a file-open dialog to select an `.xlsx` template file. Returns `Ok(())` without
+/// changing state if the user cancels. Marks the project as unsaved and emits `project-changed`.
+#[tauri::command]
+pub async fn set_bom_template(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    let dialog = app.dialog()
+        .file()
+        .set_title("Select BOM Template")
+        .add_filter("Excel Workbook", &["xlsx"])
+        .set_parent(&window);
+
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        dialog.blocking_pick_file()
+    }).await.map_err(|e| e.to_string())?;
+
+    let path = match picked {
+        Some(p) => p.to_string(),
+        None => return Ok(()),
+    };
+
+    let mut inner = state.inner.lock().unwrap();
+    let project_clone = {
+        let project = inner.current_project.as_mut()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.set_bom_template_path(Some(path));
+        project.clone()
+    };
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
+    drop(inner);
+
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    Ok(())
+}
+
+/// Clears the BOM export template from the open project, reverting to the default layout.
+#[tauri::command]
+pub fn clear_bom_template(app: AppHandle, state: State<AppState>) -> Result<(), String> {
+    let mut inner = state.inner.lock().unwrap();
+    let project_clone = {
+        let project = inner.current_project.as_mut()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.set_bom_template_path(None);
+        project.clone()
+    };
+    inner.has_unsaved_changes = true;
+    let snapshot = ProjectState { project: Some(project_clone), has_unsaved_changes: true };
+    drop(inner);
+
+    app.emit("project-changed", snapshot)
+        .map_err(|e| format!("Failed to emit event: {}", e))?;
+    Ok(())
 }
 
 // ── Recent projects commands ──────────────────────────────────────────────────
@@ -862,6 +931,253 @@ pub fn clear_recent_projects(app: AppHandle, state: State<AppState>) -> Result<(
     let _ = persist_recent(&app, &recent);
     emit_recent_changed(&app, &recent);
     Ok(())
+}
+
+// ── Header/footer drawing restoration ────────────────────────────────────────
+
+/// Patches `output_path` to restore header/footer VML drawing data from `template_path`.
+///
+/// umya-spreadsheet drops `legacyDrawingHF` and all VML drawings when round-tripping an XLSX
+/// file. This function copies the VML file, its image, and relationship entries from the
+/// template ZIP back into the output ZIP, and wires them into the output's XML.
+fn restore_hf_drawing(template_path: &Path, output_path: &Path) -> Result<(), String> {
+    use std::io::Write;
+
+    let tmpl = std::fs::read(template_path).map_err(|e| format!("read template: {e}"))?;
+    let out = std::fs::read(output_path).map_err(|e| format!("read output: {e}"))?;
+
+    // Find VML drawing relationships in template sheet rels
+    let sheet_rels = read_zip_str(&tmpl, "xl/worksheets/_rels/sheet1.xml.rels")?;
+    let vml_rels: Vec<_> = parse_zip_rels(&sheet_rels)
+        .into_iter()
+        .filter(|r| r.rel_type.ends_with("/vmlDrawing"))
+        .collect();
+    if vml_rels.is_empty() {
+        return Ok(());
+    }
+
+    // Find legacyDrawingHF elements in template sheet1.xml
+    let tmpl_sheet = read_zip_str(&tmpl, "xl/worksheets/sheet1.xml")?;
+    let hf_elems = extract_legacy_drawing_hf(&tmpl_sheet);
+    if hf_elems.is_empty() {
+        return Ok(());
+    }
+
+    // Collect VML files, their _rels, and media to copy from the template
+    let mut copy: Vec<(String, Vec<u8>)> = Vec::new();
+    for rel in &vml_rels {
+        let vml_path = resolve_zip_rel("xl/worksheets/", &rel.target);
+        if let Ok(bytes) = read_zip_bytes(&tmpl, &vml_path) {
+            let vml_rels_path = make_rels_path(&vml_path);
+            if let Ok(vml_rels_bytes) = read_zip_bytes(&tmpl, &vml_rels_path) {
+                let vml_rels_str = String::from_utf8_lossy(&vml_rels_bytes);
+                for media in parse_zip_rels(&vml_rels_str) {
+                    let dir = parent_dir(&vml_path);
+                    let media_path = resolve_zip_rel(&dir, &media.target);
+                    if let Ok(mb) = read_zip_bytes(&tmpl, &media_path) {
+                        copy.push((media_path, mb));
+                    }
+                }
+                copy.push((vml_rels_path, vml_rels_bytes));
+            }
+            copy.push((vml_path, bytes));
+        }
+    }
+
+    // Read all output entries; determine safe new rIds
+    let mut entries = read_all_zip_entries(&out)?;
+
+    let out_rels = read_zip_str(&out, "xl/worksheets/_rels/sheet1.xml.rels").unwrap_or_default();
+    let max_rid = parse_zip_rels(&out_rels)
+        .iter()
+        .filter_map(|r| r.id.strip_prefix("rId").and_then(|n| n.parse::<u32>().ok()))
+        .max()
+        .unwrap_or(0);
+
+    let mut rid_map = std::collections::HashMap::new();
+    for (i, rel) in vml_rels.iter().enumerate() {
+        rid_map.insert(rel.id.clone(), format!("rId{}", max_rid + 1 + i as u32));
+    }
+
+    // Patch sheet rels: add VML drawing relationships
+    {
+        let ns = "http://schemas.openxmlformats.org/package/2006/relationships";
+        let default_rels = format!(
+            r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="{}"></Relationships>"#,
+            ns
+        );
+        let rels = entries
+            .entry("xl/worksheets/_rels/sheet1.xml.rels".to_string())
+            .or_insert_with(|| default_rels.into_bytes());
+        let mut xml = String::from_utf8_lossy(rels).into_owned();
+        for rel in &vml_rels {
+            let new_id = &rid_map[&rel.id];
+            let entry = format!(
+                r#"<Relationship Id="{}" Type="{}" Target="{}"/>"#,
+                new_id, rel.rel_type, rel.target
+            );
+            xml = xml.replace("</Relationships>", &format!("{entry}</Relationships>"));
+        }
+        *rels = xml.into_bytes();
+    }
+
+    // Patch sheet1.xml: inject legacyDrawingHF before </worksheet>
+    if let Some(sheet) = entries.get_mut("xl/worksheets/sheet1.xml") {
+        let mut xml = String::from_utf8_lossy(sheet).into_owned();
+        for elem in &hf_elems {
+            let mut patched = elem.clone();
+            for (old, new) in &rid_map {
+                patched = patched.replace(
+                    &format!(r#"r:id="{old}""#),
+                    &format!(r#"r:id="{new}""#),
+                );
+            }
+            xml = xml.replace("</worksheet>", &format!("{patched}</worksheet>"));
+        }
+        *sheet = xml.into_bytes();
+    }
+
+    // Patch [Content_Types].xml: add vml and media content types if missing
+    if let Some(ct) = entries.get_mut("[Content_Types].xml") {
+        let mut xml = String::from_utf8_lossy(ct).into_owned();
+        let needed: &[(&str, &str)] = &[
+            ("vml", "application/vnd.openxmlformats-officedocument.vmlDrawing"),
+            ("png",  "image/png"),
+            ("jpg",  "image/jpeg"),
+            ("jpeg", "image/jpeg"),
+            ("gif",  "image/gif"),
+            ("tiff", "image/tiff"),
+            ("emf",  "image/x-emf"),
+        ];
+        for (ext, mime) in needed {
+            if !xml.contains(&format!(r#"Extension="{}""#, ext)) {
+                xml = xml.replace(
+                    "</Types>",
+                    &format!(r#"<Default Extension="{}" ContentType="{}"/></Types>"#, ext, mime),
+                );
+            }
+        }
+        *ct = xml.into_bytes();
+    }
+
+    // Add VML and media files (skip if somehow already present)
+    for (path, bytes) in copy {
+        entries.entry(path).or_insert(bytes);
+    }
+
+    // Write patched ZIP back to output_path
+    let mut buf = Vec::new();
+    {
+        let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, bytes) in &entries {
+            writer.start_file(name, options).map_err(|e| e.to_string())?;
+            writer.write_all(bytes).map_err(|e| e.to_string())?;
+        }
+        writer.finish().map_err(|e| e.to_string())?;
+    }
+    std::fs::write(output_path, &buf).map_err(|e| format!("write patched output: {e}"))?;
+    Ok(())
+}
+
+struct ZipRel { id: String, rel_type: String, target: String }
+
+fn parse_zip_rels(xml: &str) -> Vec<ZipRel> {
+    let mut rels = Vec::new();
+    let mut s = xml;
+    while let Some(start) = s.find("<Relationship") {
+        let rest = &s[start..];
+        let end = rest.find("/>").map(|i| i + 2)
+            .or_else(|| rest.find("</Relationship>").map(|i| i + 15))
+            .unwrap_or(rest.len());
+        let elem = &rest[..end];
+        let id = xml_attr(elem, "Id");
+        let rel_type = xml_attr(elem, "Type");
+        let target = xml_attr(elem, "Target");
+        if !id.is_empty() && !rel_type.is_empty() {
+            rels.push(ZipRel { id, rel_type, target });
+        }
+        s = &rest[end.min(rest.len())..];
+    }
+    rels
+}
+
+fn xml_attr(xml: &str, attr: &str) -> String {
+    let pat = format!(r#"{}=""#, attr);
+    if let Some(i) = xml.find(&pat) {
+        let after = &xml[i + pat.len()..];
+        if let Some(end) = after.find('"') {
+            return after[..end].to_string();
+        }
+    }
+    String::new()
+}
+
+fn extract_legacy_drawing_hf(sheet_xml: &str) -> Vec<String> {
+    let mut results = Vec::new();
+    let mut s = sheet_xml;
+    while let Some(start) = s.find("<legacyDrawingHF") {
+        let rest = &s[start..];
+        if let Some(end) = rest.find("/>") {
+            results.push(rest[..end + 2].to_string());
+            s = &rest[end + 2..];
+        } else {
+            break;
+        }
+    }
+    results
+}
+
+fn resolve_zip_rel(base_dir: &str, target: &str) -> String {
+    let mut parts: Vec<&str> = base_dir.trim_end_matches('/').split('/').collect();
+    for seg in target.split('/') {
+        if seg == ".." { parts.pop(); } else { parts.push(seg); }
+    }
+    parts.join("/")
+}
+
+fn make_rels_path(path: &str) -> String {
+    match path.rfind('/') {
+        Some(i) => format!("{}/_rels/{}.rels", &path[..i], &path[i + 1..]),
+        None => format!("_rels/{}.rels", path),
+    }
+}
+
+fn parent_dir(path: &str) -> String {
+    match path.rfind('/') {
+        Some(i) => format!("{}/", &path[..i]),
+        None => String::new(),
+    }
+}
+
+fn read_zip_str(zip_bytes: &[u8], name: &str) -> Result<String, String> {
+    String::from_utf8(read_zip_bytes(zip_bytes, name)?).map_err(|e| e.to_string())
+}
+
+fn read_zip_bytes(zip_bytes: &[u8], name: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes))
+        .map_err(|e| e.to_string())?;
+    let mut file = archive.by_name(name).map_err(|_| format!("not in zip: {name}"))?;
+    let mut out = Vec::new();
+    file.read_to_end(&mut out).map_err(|e| e.to_string())?;
+    Ok(out)
+}
+
+fn read_all_zip_entries(zip_bytes: &[u8]) -> Result<std::collections::BTreeMap<String, Vec<u8>>, String> {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes))
+        .map_err(|e| e.to_string())?;
+    let mut map = std::collections::BTreeMap::new();
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        if file.is_dir() { continue; }
+        let name = file.name().to_string();
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+        map.insert(name, bytes);
+    }
+    Ok(map)
 }
 
 #[cfg(test)]
