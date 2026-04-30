@@ -41,6 +41,9 @@ pub struct Metadata {
 
     /// Unix timestamp in milliseconds when the CSV was parsed.
     pub csv_imported_at: i64,
+
+    /// Name of the engineer responsible for this BOM, copied from the project at import time.
+    pub engineer: String,
 }
 
 /// Opens (or creates) a SQLite database at `path` and ensures the `bom` and `metadata` schemas
@@ -71,7 +74,8 @@ pub fn create_database(path: &Path) -> SqliteResult<Connection> {
             project_specifics TEXT,
             database_path    TEXT,
             database_version TEXT,
-            resolved_at      INTEGER
+            resolved_at      INTEGER,
+            engineer         TEXT
         )",
         [],
     )?;
@@ -84,14 +88,15 @@ pub fn create_database(path: &Path) -> SqliteResult<Connection> {
 /// Replaces any existing row (there can only be one). Returns an error if the insert fails.
 pub fn insert_metadata(conn: &Connection, metadata: &Metadata) -> SqliteResult<()> {
     conn.execute(
-        "INSERT OR REPLACE INTO metadata (id, pcb_name, design_variant, bom_version, source_csv_path, csv_imported_at)
-         VALUES (1, ?1, ?2, ?3, ?4, ?5)",
+        "INSERT OR REPLACE INTO metadata (id, pcb_name, design_variant, bom_version, source_csv_path, csv_imported_at, engineer)
+         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)",
         rusqlite::params![
             metadata.pcb_name,
             metadata.design_variant,
             metadata.bom_version,
             metadata.source_csv_path,
             metadata.csv_imported_at,
+            metadata.engineer,
         ],
     )?;
     Ok(())

@@ -27,4 +27,8 @@ source_csv_path: string,
 /**
  * Unix timestamp in milliseconds when the CSV was parsed.
  */
-csv_imported_at: bigint, };
+csv_imported_at: bigint, 
+/**
+ * Name of the engineer responsible for this BOM, copied from the project at import time.
+ */
+engineer: string, };

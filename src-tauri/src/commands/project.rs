@@ -591,12 +591,22 @@ pub async fn create_nextbom_file(
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
 
+    let engineer = state
+        .inner
+        .lock()
+        .unwrap()
+        .current_project
+        .as_ref()
+        .and_then(|p| p.engineer.clone())
+        .unwrap_or_default();
+
     insert_metadata(&conn, &Metadata {
         pcb_name,
         design_variant: design_variant.clone(),
         bom_version,
         source_csv_path: csv_path.clone(),
         csv_imported_at,
+        engineer,
     })
         .map_err(|e| format!("Failed to write metadata: {}", e))?;
 
@@ -768,21 +778,25 @@ pub async fn export_bom_to_excel(
         let conn = rusqlite::Connection::open(&nextbom_path)
             .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
 
-        let (pcb_name, bom_version, design_variant, default_filename) = conn
+        // Migrate older `.nextbom` files that pre-date the engineer column.
+        let _ = conn.execute("ALTER TABLE metadata ADD COLUMN engineer TEXT", []);
+
+        let (pcb_name, bom_version, design_variant, metadata_engineer, default_filename) = conn
             .query_row(
-                "SELECT pcb_name, bom_version, design_variant FROM metadata WHERE id = 1",
+                "SELECT pcb_name, bom_version, design_variant, engineer FROM metadata WHERE id = 1",
                 [],
                 |row| Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
                 )),
             )
-            .map(|(n, v, d)| {
+            .map(|(n, v, d, e)| {
                 let filename = format!("{}_v{}.xlsx", n, v);
-                (n, v, d, filename)
+                (n, v, d, e, filename)
             })
-            .unwrap_or_else(|_| (String::new(), String::new(), String::new(), "bom.xlsx".to_string()));
+            .unwrap_or_else(|_| (String::new(), String::new(), String::new(), None, "bom.xlsx".to_string()));
 
         let entries = read_resolved_bom(&conn)
             .map_err(|e| format!("Failed to read BOM: {}", e))?;
@@ -790,7 +804,10 @@ pub async fn export_bom_to_excel(
 
         let guard = state.inner.lock().unwrap();
         let template_path = guard.current_project.as_ref().and_then(|p| p.bom_template_path.clone());
-        let engineer = guard.current_project.as_ref().and_then(|p| p.engineer.clone()).unwrap_or_default();
+        let engineer = metadata_engineer
+            .filter(|s| !s.is_empty())
+            .or_else(|| guard.current_project.as_ref().and_then(|p| p.engineer.clone()))
+            .unwrap_or_default();
 
         (default_filename, rows, template_path, pcb_name, bom_version, design_variant, engineer)
     };
