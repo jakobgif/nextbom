@@ -773,46 +773,48 @@ pub async fn export_bom_to_excel(
         }
     };
 
-    // Read BOM data and project settings (all sync before any await)
-    let (default_filename, rows, template_path, pcb_name, bom_version, design_variant, engineer) = {
+    // Read BOM data and metadata (all sync before any await).
+    // Per the export rule, every value used in the output must come from the .nextbom file.
+    let (default_filename, rows, template_path, pcb_name, bom_version, design_variant, engineer, creation_date) = {
         let conn = rusqlite::Connection::open(&nextbom_path)
             .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
 
         // Migrate older `.nextbom` files that pre-date the engineer column.
         let _ = conn.execute("ALTER TABLE metadata ADD COLUMN engineer TEXT", []);
 
-        let (pcb_name, bom_version, design_variant, metadata_engineer, default_filename) = conn
+        let (pcb_name, bom_version, design_variant, engineer, csv_imported_at, default_filename) = conn
             .query_row(
-                "SELECT pcb_name, bom_version, design_variant, engineer FROM metadata WHERE id = 1",
+                "SELECT pcb_name, bom_version, design_variant, engineer, csv_imported_at FROM metadata WHERE id = 1",
                 [],
                 |row| Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, Option<String>>(3)?,
+                    row.get::<_, i64>(4)?,
                 )),
             )
-            .map(|(n, v, d, e)| {
+            .map(|(n, v, d, e, t)| {
                 let filename = format!("{}_v{}.xlsx", n, v);
-                (n, v, d, e, filename)
+                (n, v, d, e.unwrap_or_default(), t, filename)
             })
-            .unwrap_or_else(|_| (String::new(), String::new(), String::new(), None, "bom.xlsx".to_string()));
+            .unwrap_or_else(|_| (String::new(), String::new(), String::new(), String::new(), 0, "bom.xlsx".to_string()));
+
+        let creation_date = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(csv_imported_at)
+            .map(|dt| dt.format("%Y-%m-%d").to_string())
+            .unwrap_or_default();
 
         let entries = read_resolved_bom(&conn)
             .map_err(|e| format!("Failed to read BOM: {}", e))?;
         let rows = group_for_excel(&entries);
 
-        let guard = state.inner.lock().unwrap();
-        let template_path = guard.current_project.as_ref().and_then(|p| p.bom_template_path.clone());
-        let engineer = metadata_engineer
-            .filter(|s| !s.is_empty())
-            .or_else(|| guard.current_project.as_ref().and_then(|p| p.engineer.clone()))
-            .unwrap_or_default();
+        let template_path = state.inner.lock().unwrap()
+            .current_project
+            .as_ref()
+            .and_then(|p| p.bom_template_path.clone());
 
-        (default_filename, rows, template_path, pcb_name, bom_version, design_variant, engineer)
+        (default_filename, rows, template_path, pcb_name, bom_version, design_variant, engineer, creation_date)
     };
-
-    let creation_date = chrono::Local::now().format("%Y-%m-%d").to_string();
 
     // Save-file dialog
     let window = app.get_webview_window("main")
