@@ -10,6 +10,7 @@ import { useTheme } from "./theme-provider";
 import { useTooltipSettings } from "./ui/tooltip";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { SetStringDialog } from "./set-string-dialog";
+import { CustomThemeDialog } from "./custom-theme-dialog";
 import { useProjectStore } from "@/store/project-store";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
 import { getVersion } from "@tauri-apps/api/app";
@@ -23,6 +24,7 @@ export function Titlebar(){
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
   const [engineerDialogOpen, setEngineerDialogOpen] = useState(false);
+  const [customThemeDialogOpen, setCustomThemeDialogOpen] = useState(false);
   const [partsAlternatives, setPartsAlternatives] = useState<string[]>([]);
   const [appVersion, setAppVersion] = useState<string>("");
 
@@ -206,6 +208,7 @@ export function Titlebar(){
                 <MenubarItem onClick={() => {
                   setTheme(theme === "dark" ? "light" : "dark");
                 }}>Toggle Theme</MenubarItem>
+                <MenubarItem onClick={() => setCustomThemeDialogOpen(true)}>Customize Theme...</MenubarItem>
                 <MenubarItem onClick={toggleTooltips}>
                   {tooltipsEnabled ? "Disable Tooltips" : "Enable Tooltips"}
                 </MenubarItem>
@@ -227,6 +230,7 @@ export function Titlebar(){
       </div>
 
       <NewProjectDialog open={newProjectDialogOpen} onOpenChange={setNewProjectDialogOpen} />
+      <CustomThemeDialog open={customThemeDialogOpen} onOpenChange={setCustomThemeDialogOpen} />
       <SetStringDialog
         open={titleDialogOpen}
         onOpenChange={setTitleDialogOpen}

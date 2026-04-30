@@ -1,5 +1,6 @@
 import "./App.css";
 import { useEffect, useState } from "react";
+import { loadSavedTheme } from "./lib/custom-theme";
 import { Check, ListPlus } from "lucide-react";
 import { Titlebar } from "./components/titlebar";
 import { Button } from "./components/ui/button";
@@ -20,6 +21,7 @@ function App() {
   const [pendingNextbomPath, setPendingNextbomPath] = useState("");
 
   useEffect(() => {
+    loadSavedTheme();
     initialize();
   }, []);
 
