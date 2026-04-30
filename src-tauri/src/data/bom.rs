@@ -464,7 +464,7 @@ fn apply_template_cell(
         Some((row, no)) => s
             .replace("?no", &no.to_string())
             .replace("?part_id", &row.part_id)
-            .replace("?designators", &row.designators.join("; "))
+            .replace("?designators", &row.designators.join(", "))
             .replace("?qty", &row.qty.to_string())
             .replace("?mfr", &row.mfr)
             .replace("?mpn", &row.mpn),
@@ -492,7 +492,7 @@ pub fn write_default_xlsx(path: &std::path::Path, rows: &[ExcelBomRow]) -> Resul
     for (i, row) in rows.iter().enumerate() {
         let r = i as u32 + 2;
         sheet.get_cell_mut((1u32, r)).set_value(&row.part_id);
-        sheet.get_cell_mut((2u32, r)).set_value(row.designators.join("; "));
+        sheet.get_cell_mut((2u32, r)).set_value(row.designators.join(", "));
         sheet.get_cell_mut((3u32, r)).set_value_number(row.qty as f64);
         sheet.get_cell_mut((4u32, r)).set_value(&row.mfr);
         sheet.get_cell_mut((5u32, r)).set_value(&row.mpn);
