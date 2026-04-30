@@ -17,6 +17,7 @@ import { formatLastChange } from "./lib/utils";
 
 function App() {
   const { project, recentProjects, initialize } = useProjectStore();
+  const [pendingNextbomPath, setPendingNextbomPath] = useState("");
 
   useEffect(() => {
     initialize();
@@ -81,13 +82,13 @@ function App() {
               <AccordionItem value="item-1">
                 <AccordionTrigger>1. Create a NextBOM file</AccordionTrigger>
                 <AccordionContent>
-                  <CreateNextbomFile key={project.uuid} />
+                  <CreateNextbomFile key={project.uuid} onFileCreated={setPendingNextbomPath} />
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="item-2">
                 <AccordionTrigger>2. Resolve Manufacturers &amp; MPNs</AccordionTrigger>
                 <AccordionContent>
-                  <ResolveManufacturers key={project.uuid} />
+                  <ResolveManufacturers key={project.uuid} pendingNextbomPath={pendingNextbomPath} />
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
@@ -106,7 +107,7 @@ function App() {
   );
 }
 
-function CreateNextbomFile(){
+function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) => void }) {
   const { project } = useProjectStore();
   const [csvLoaded, setCsvLoaded] = useState(false);
   const [csvPath, setCsvPath] = useState("");
@@ -162,6 +163,7 @@ function CreateNextbomFile(){
       });
       setFileCreated(true);
       setNextbomPath(nextbom_path);
+      onFileCreated?.(nextbom_path);
       toast.success(message);
     } catch (error: any) {
       if (error !== "No save location selected") {
@@ -264,12 +266,13 @@ function CreateNextbomFile(){
   )
 }
 
-function ResolveManufacturers() {
+function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: string }) {
   const { project } = useProjectStore();
   const [resolved, setResolved] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [nextbomPath, setNextbomPath] = useState("");
   const [dbVersion, setDbVersion] = useState<string | null>(null);
+  const [autoLoad, setAutoLoad] = useState(true);
 
   useEffect(() => {
     if (!project?.database_path) return;
@@ -281,7 +284,7 @@ function ResolveManufacturers() {
   const handleResolve = async () => {
     setResolving(true);
     try {
-      const { message, nextbom_path } = await invoke<{ message: string; nextbom_path: string }>("resolve_bom_manufacturers");
+      const { message, nextbom_path } = await invoke<{ message: string; nextbom_path: string }>("resolve_bom_manufacturers", { usePending: autoLoad && !!pendingNextbomPath });
       setResolved(true);
       setNextbomPath(nextbom_path);
       toast.success(message);
@@ -301,7 +304,18 @@ function ResolveManufacturers() {
   ];
 
   return (
-    <div className="flex flex-col items-start gap-4 ml-5">
+    <div className="flex flex-col items-start gap-6 ml-5">
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="auto-load"
+          checked={autoLoad}
+          disabled={!pendingNextbomPath}
+          onCheckedChange={(v) => setAutoLoad(!!v)}
+        />
+        <label htmlFor="auto-load" className={`text-sm select-none ${!pendingNextbomPath ? "text-muted-foreground/50" : "cursor-pointer"}`}>
+          Load NextBOM from step 1
+        </label>
+      </div>
       <div className="flex flex-col gap-1 text-xs font-mono">
         {rows.map(([label, value]) => (
           <div key={label} className="flex gap-2">

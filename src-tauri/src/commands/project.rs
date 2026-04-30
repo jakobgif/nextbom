@@ -602,6 +602,8 @@ pub async fn create_nextbom_file(
         let _ = app.emit("project-changed", snapshot);
     }
 
+    state.inner.lock().unwrap().pending_nextbom_path = Some(db_path.clone());
+
     Ok(serde_json::json!({
         "message": format!("Successfully created NextBOM file with {} entries", entries.len()),
         "nextbom_path": db_path
@@ -644,29 +646,38 @@ pub fn get_database_info(state: State<AppState>) -> Result<serde_json::Value, St
 pub async fn resolve_bom_manufacturers(
     app: AppHandle,
     state: State<'_, AppState>,
+    use_pending: bool,
 ) -> Result<serde_json::Value, String> {
-    let (db_path, project_specifics) = {
+    let (db_path, project_specifics, pending_nextbom_path) = {
         let inner = state.inner.lock().unwrap();
         let project = inner.current_project.as_ref()
             .ok_or_else(|| "No project currently open".to_string())?;
         let db_path = project.database_path.clone()
             .ok_or_else(|| "No parts database linked to this project".to_string())?;
         let specifics = project.project_specifics.clone();
-        (db_path, specifics)
+        (db_path, specifics, inner.pending_nextbom_path.clone())
     };
 
-    let dialog = app.dialog()
-        .file()
-        .set_title("Select NextBOM working file")
-        .add_filter("NextBOM working file", &["nextbom"]);
+    let nextbom_path = if use_pending {
+        if let Some(path) = pending_nextbom_path {
+            path
+        } else {
+            return Err("No NextBOM file from step 1 available".to_string());
+        }
+    } else {
+        let dialog = app.dialog()
+            .file()
+            .set_title("Select NextBOM working file")
+            .add_filter("NextBOM working file", &["nextbom"]);
 
-    let nextbom_path = tauri::async_runtime::spawn_blocking(move || {
-        dialog.blocking_pick_file()
-    }).await.map_err(|e| e.to_string())?;
+        let picked = tauri::async_runtime::spawn_blocking(move || {
+            dialog.blocking_pick_file()
+        }).await.map_err(|e| e.to_string())?;
 
-    let nextbom_path = match nextbom_path {
-        Some(p) => p.to_string(),
-        None => return Err("No file selected".to_string()),
+        match picked {
+            Some(p) => p.to_string(),
+            None => return Err("No file selected".to_string()),
+        }
     };
 
     let nextbom_conn = rusqlite::Connection::open(&nextbom_path)

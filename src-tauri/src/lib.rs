@@ -26,6 +26,12 @@ pub struct AppStateInner {
     /// selects a file.
     pub pending_csv_path: Option<String>,
 
+    /// Path of the most recently created `.nextbom` file.
+    ///
+    /// Set by `create_nextbom_file`. Used by `resolve_bom_manufacturers` to skip the
+    /// file-picker dialog when a file was just created in the same session.
+    pub pending_nextbom_path: Option<String>,
+
     /// Recently opened projects list, persisted to the app config directory.
     pub recent_projects: RecentProjects,
 }
@@ -53,6 +59,7 @@ pub fn run() {
                     current_project_path: None,
                     has_unsaved_changes: false,
                     pending_csv_path: None,
+                    pending_nextbom_path: None,
                     recent_projects: recent,
                 }),
             });
