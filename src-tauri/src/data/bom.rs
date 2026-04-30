@@ -339,6 +339,85 @@ pub fn resolve_bom_entries(
     Ok(count)
 }
 
+/// A BOM row with resolved manufacturer and MPN data, suitable for display.
+///
+/// After resolution the `mfr`/`mpn` arrays are populated from the main parts database and
+/// `alt_mfr`/`alt_mpn` from the project-specific alt table. Before resolution all four are
+/// empty.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "../../src/types/ResolvedBomEntry.ts")]
+pub struct ResolvedBomEntry {
+    pub designator: String,
+    pub part_id: String,
+    pub mfr: Vec<String>,
+    pub mpn: Vec<String>,
+    pub alt_mfr: Vec<String>,
+    pub alt_mpn: Vec<String>,
+}
+
+/// Reads all rows from the `bom` table of `conn`, returning them as [`ResolvedBomEntry`]
+/// values sorted by designator.
+///
+/// When the resolution columns (`mfr`, `mpn`, `alt_mfr`, `alt_mpn`) are absent (pre-resolution
+/// file), the four `Vec` fields are returned empty.
+pub fn read_resolved_bom(conn: &Connection) -> SqliteResult<Vec<ResolvedBomEntry>> {
+    let has_resolution_cols: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('bom') WHERE name='mfr'",
+        [],
+        |row| row.get(0),
+    )?;
+
+    if has_resolution_cols > 0 {
+        let mut stmt = conn.prepare(
+            "SELECT designator, part_id, mfr, mpn, alt_mfr, alt_mpn FROM bom ORDER BY designator",
+        )?;
+        let rows: Vec<_> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                ))
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+
+        let parse = |s: Option<String>| -> Vec<String> {
+            s.and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default()
+        };
+
+        Ok(rows
+            .into_iter()
+            .map(|(designator, part_id, mfr_j, mpn_j, alt_mfr_j, alt_mpn_j)| ResolvedBomEntry {
+                designator,
+                part_id,
+                mfr: parse(mfr_j),
+                mpn: parse(mpn_j),
+                alt_mfr: parse(alt_mfr_j),
+                alt_mpn: parse(alt_mpn_j),
+            })
+            .collect())
+    } else {
+        let mut stmt =
+            conn.prepare("SELECT designator, part_id FROM bom ORDER BY designator")?;
+        let entries = stmt
+            .query_map([], |row| {
+                Ok(ResolvedBomEntry {
+                    designator: row.get(0)?,
+                    part_id: row.get(1)?,
+                    mfr: vec![],
+                    mpn: vec![],
+                    alt_mfr: vec![],
+                    alt_mpn: vec![],
+                })
+            })?
+            .collect::<SqliteResult<Vec<_>>>();
+        entries
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

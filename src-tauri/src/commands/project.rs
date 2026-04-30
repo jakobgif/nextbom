@@ -1,4 +1,4 @@
-use crate::data::{create_database, insert_bom_entries, insert_metadata, list_alt_tables, parse_csv, read_nextdb_metadata, resolve_bom_entries, update_resolution_metadata, Metadata, Project, ProjectState, RecentProject, RecentProjects};
+use crate::data::{create_database, insert_bom_entries, insert_metadata, list_alt_tables, parse_csv, read_nextdb_metadata, read_resolved_bom, resolve_bom_entries, update_resolution_metadata, Metadata, Project, ProjectState, RecentProject, RecentProjects, ResolvedBomEntry};
 use crate::AppState;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -720,6 +720,15 @@ pub async fn resolve_bom_manufacturers(
         "message": format!("Resolved {} entries", count),
         "nextbom_path": nextbom_path
     }))
+}
+
+/// Returns all rows from the `bom` table of the given `.nextbom` file, including resolved
+/// manufacturer and MPN data if the file has been through step 2.
+#[tauri::command]
+pub fn get_resolved_bom(nextbom_path: String) -> Result<Vec<ResolvedBomEntry>, String> {
+    let conn = rusqlite::Connection::open(&nextbom_path)
+        .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
+    read_resolved_bom(&conn).map_err(|e| format!("Failed to read BOM: {}", e))
 }
 
 // ── Recent projects commands ──────────────────────────────────────────────────

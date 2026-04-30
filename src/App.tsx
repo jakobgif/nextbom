@@ -257,12 +257,22 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
   )
 }
 
+type ResolvedBomEntry = {
+  designator: string;
+  part_id: string;
+  mfr: string[];
+  mpn: string[];
+  alt_mfr: string[];
+  alt_mpn: string[];
+};
+
 function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: string }) {
   const { project } = useProjectStore();
   const [resolved, setResolved] = useState(false);
   const [nextbomPath, setNextbomPath] = useState("");
   const [dbVersion, setDbVersion] = useState<string | null>(null);
   const [autoLoad, setAutoLoad] = useState(true);
+  const [bomEntries, setBomEntries] = useState<ResolvedBomEntry[]>([]);
 
   useEffect(() => {
     if (!project?.database_path) return;
@@ -277,6 +287,8 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
       setResolved(true);
       setNextbomPath(nextbom_path);
       toast.success(message);
+      const entries = await invoke<ResolvedBomEntry[]>("get_resolved_bom", { nextbomPath: nextbom_path });
+      setBomEntries(entries);
     } catch (error: any) {
       if (error !== "No file selected") {
         toast.error(error.toString());
@@ -284,11 +296,27 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
     }
   };
 
-  const rows: [string, string][] = [
+  const infoRows: [string, string][] = [
     ["database", project?.database_path ?? "—"],
     ["database version", dbVersion ?? "—"],
     ["active alternative", project?.project_specifics ?? "—"],
   ];
+
+  const grouped = Object.values(
+    bomEntries.reduce<Record<string, { part_id: string; designators: string[]; mfr: string[]; mpn: string[]; alt_mfr: string[]; alt_mpn: string[] }>>(
+      (acc, e) => {
+        if (acc[e.part_id]) {
+          acc[e.part_id].designators.push(e.designator);
+        } else {
+          acc[e.part_id] = { part_id: e.part_id, designators: [e.designator], mfr: e.mfr, mpn: e.mpn, alt_mfr: e.alt_mfr, alt_mpn: e.alt_mpn };
+        }
+        return acc;
+      },
+      {}
+    )
+  );
+
+  const hasAlts = grouped.some((g) => g.alt_mpn.length > 0);
 
   return (
     <div className="flex flex-col items-start gap-6 ml-5">
@@ -304,7 +332,7 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
         </label>
       </div>
       <div className="flex flex-col gap-1 text-xs font-mono">
-        {rows.map(([label, value]) => (
+        {infoRows.map(([label, value]) => (
           <div key={label} className="flex gap-2">
             <span className="text-muted-foreground/60 w-40 shrink-0">{label}</span>
             <span className="text-muted-foreground">{value}</span>
@@ -316,6 +344,46 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
         {resolved && <Check className="ml-2 size-4 text-green-500" />}
         {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
       </div>
+      {grouped.length > 0 && (
+        <div className="w-full overflow-auto max-h-72 rounded border border-border">
+          <table className="w-full text-xs font-mono border-collapse">
+            <thead className="sticky top-0 bg-background border-b border-border">
+              <tr>
+                <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Part ID</th>
+                <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Designators</th>
+                <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Manufacturer</th>
+                <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">MPN</th>
+                {hasAlts && <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Alternative Manufacturer</th>}
+                {hasAlts && <th className="text-left px-3 py-1.5 text-muted-foreground font-medium">Alternative MPN</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {grouped.map((g) => (
+                <tr key={g.part_id} className="border-t border-border/50 hover:bg-muted/30">
+                  <td className="px-3 py-1">{g.part_id}</td>
+                  <td className="px-3 py-1 text-muted-foreground">{g.designators.join(", ")}</td>
+                  <td className="px-3 py-1">
+                    {g.mfr.length > 0 ? g.mfr.map((m) => <div key={m}>{m}</div>) : <span className="text-muted-foreground/40">—</span>}
+                  </td>
+                  <td className="px-3 py-1">
+                    {g.mpn.length > 0 ? g.mpn.map((m) => <div key={m}>{m}</div>) : <span className="text-muted-foreground/40">—</span>}
+                  </td>
+                  {hasAlts && (
+                    <td className="px-3 py-1">
+                      {g.alt_mfr.length > 0 ? g.alt_mfr.map((m) => <div key={m}>{m}</div>) : <span className="text-muted-foreground/40">—</span>}
+                    </td>
+                  )}
+                  {hasAlts && (
+                    <td className="px-3 py-1 text-muted-foreground">
+                      {g.alt_mpn.length > 0 ? g.alt_mpn.map((m) => <div key={m}>{m}</div>) : <span className="text-muted-foreground/40">—</span>}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
