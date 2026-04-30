@@ -113,9 +113,6 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
   const [csvPath, setCsvPath] = useState("");
   const [fileCreated, setFileCreated] = useState(false);
   const [nextbomPath, setNextbomPath] = useState("");
-  const [csvPicking, setCsvPicking] = useState(false);
-  const [fileCreating, setFileCreating] = useState(false);
-
   const [pcbNameAuto, setPcbNameAuto] = useState(true);
   const [pcbNameManual, setPcbNameManual] = useState("");
   const [pcbNameError, setPcbNameError] = useState(false);
@@ -128,7 +125,6 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
   const pcbName = pcbNameAuto ? (project?.title ?? "") : pcbNameManual;
 
   const handleImportCsv = async () => {
-    setCsvPicking(true);
     try {
       const { message, csv_path } = await invoke<{ message: string; filename_stem: string; csv_path: string }>("load_csv");
       setCsvLoaded(true);
@@ -138,8 +134,6 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
       if (error !== "No file selected") {
         toast.error(error.toString());
       }
-    } finally {
-      setCsvPicking(false);
     }
   };
 
@@ -154,7 +148,6 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
       return;
     }
     setVersionError(false);
-    setFileCreating(true);
     try {
       const { message, nextbom_path } = await invoke<{ message: string; nextbom_path: string }>("create_nextbom_file", {
         pcbName,
@@ -169,8 +162,6 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
       if (error !== "No save location selected") {
         toast.error(error.toString());
       }
-    } finally {
-      setFileCreating(false);
     }
   };
 
@@ -180,7 +171,7 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
         <FieldLabel>Select CSV file</FieldLabel>
         <div className="flex flex-row items-center">
           <Tooltip>
-            <TooltipTrigger asChild><Button onClick={handleImportCsv} disabled={csvPicking}>Import CSV file</Button></TooltipTrigger>
+            <TooltipTrigger asChild><Button onClick={handleImportCsv}>Import CSV file</Button></TooltipTrigger>
             <TooltipContent className="select-none">
               <p>
                 CSV format:<br />
@@ -258,7 +249,7 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
       </div>
 
       <div className="flex flex-row items-center">
-        <Button onClick={handleCreateFile} disabled={!csvLoaded || fileCreating}>Create NextBOM file</Button>
+        <Button onClick={handleCreateFile} disabled={!csvLoaded}>Create NextBOM file</Button>
         {fileCreated && <Check className="ml-2 size-4 text-green-500" />}
         {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
       </div>
@@ -269,7 +260,6 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
 function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: string }) {
   const { project } = useProjectStore();
   const [resolved, setResolved] = useState(false);
-  const [resolving, setResolving] = useState(false);
   const [nextbomPath, setNextbomPath] = useState("");
   const [dbVersion, setDbVersion] = useState<string | null>(null);
   const [autoLoad, setAutoLoad] = useState(true);
@@ -282,7 +272,6 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
   }, [project?.database_path]);
 
   const handleResolve = async () => {
-    setResolving(true);
     try {
       const { message, nextbom_path } = await invoke<{ message: string; nextbom_path: string }>("resolve_bom_manufacturers", { usePending: autoLoad && !!pendingNextbomPath });
       setResolved(true);
@@ -292,8 +281,6 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
       if (error !== "No file selected") {
         toast.error(error.toString());
       }
-    } finally {
-      setResolving(false);
     }
   };
 
@@ -325,7 +312,7 @@ function ResolveManufacturers({ pendingNextbomPath }: { pendingNextbomPath?: str
         ))}
       </div>
       <div className="flex flex-row items-center">
-        <Button onClick={handleResolve} disabled={resolving}>Resolve</Button>
+        <Button onClick={handleResolve}>Resolve</Button>
         {resolved && <Check className="ml-2 size-4 text-green-500" />}
         {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
       </div>
