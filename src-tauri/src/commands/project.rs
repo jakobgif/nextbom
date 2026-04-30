@@ -113,6 +113,7 @@ pub fn create_project(
     project_specifics: Option<String>,
     design_variant: Option<String>,
     database_path: Option<String>,
+    bom_template_path: Option<String>,
     state: State<AppState>,
 ) -> Result<(), String> {
     let mut project = Project::new();
@@ -139,6 +140,12 @@ pub fn create_project(
     if let Some(db_path) = database_path {
         if !db_path.is_empty() {
             project.set_database_path(db_path);
+        }
+    }
+
+    if let Some(tmpl_path) = bom_template_path {
+        if !tmpl_path.is_empty() {
+            project.set_bom_template_path(Some(tmpl_path));
         }
     }
 
