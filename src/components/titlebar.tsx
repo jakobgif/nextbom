@@ -196,6 +196,23 @@ export function Titlebar(){
                     {!project?.database_path && <MenubarItem disabled>No database linked</MenubarItem>}
                   </MenubarSubContent>
                 </MenubarSub>
+                <MenubarSeparator />
+                <MenubarItem disabled={!project} onClick={async () => {
+                  try {
+                    await invoke("set_bom_template");
+                  } catch (error: any) {
+                    toast.error(error.toString());
+                  }
+                }}>Set BOM Template</MenubarItem>
+                {project?.bom_template_path && (
+                  <MenubarItem onClick={async () => {
+                    try {
+                      await invoke("clear_bom_template");
+                    } catch (error: any) {
+                      toast.error(error.toString());
+                    }
+                  }}>Clear BOM Template</MenubarItem>
+                )}
               </MenubarContent>
             </MenubarMenu>
             <MenubarMenu>
