@@ -355,6 +355,56 @@ pub struct ResolvedBomEntry {
     pub alt_mpn: Vec<String>,
 }
 
+/// A grouped BOM row ready for Excel export: one row per `part_id`.
+///
+/// `designators` is sorted alphabetically. `mfr` and `mpn` each contain primary values
+/// followed by alternatives, joined by `"; "`.
+pub struct ExcelBomRow {
+    pub part_id: String,
+    pub designators: Vec<String>,
+    pub qty: usize,
+    pub mfr: String,
+    pub mpn: String,
+}
+
+/// Groups resolved BOM entries into one row per `part_id`, sorted alphabetically.
+///
+/// Designators sharing the same `part_id` are collected and sorted. `mfr` and `mpn` come from
+/// the first entry for each `part_id` (they are identical for all designators of the same part);
+/// alt values are appended behind the primary values in the same cell.
+pub fn group_for_excel(entries: &[ResolvedBomEntry]) -> Vec<ExcelBomRow> {
+    use std::collections::BTreeMap;
+
+    let mut map: BTreeMap<
+        String,
+        (Vec<String>, Vec<String>, Vec<String>, Vec<String>, Vec<String>),
+    > = BTreeMap::new();
+
+    for e in entries {
+        let g = map.entry(e.part_id.clone()).or_insert_with(|| {
+            (Vec::new(), e.mfr.clone(), e.mpn.clone(), e.alt_mfr.clone(), e.alt_mpn.clone())
+        });
+        g.0.push(e.designator.clone());
+    }
+
+    map.into_iter()
+        .map(|(part_id, (mut designators, mfr, mpn, alt_mfr, alt_mpn))| {
+            designators.sort();
+            let all_mfr: Vec<&str> =
+                mfr.iter().chain(alt_mfr.iter()).map(String::as_str).collect();
+            let all_mpn: Vec<&str> =
+                mpn.iter().chain(alt_mpn.iter()).map(String::as_str).collect();
+            ExcelBomRow {
+                qty: designators.len(),
+                part_id,
+                designators,
+                mfr: all_mfr.join("; "),
+                mpn: all_mpn.join("; "),
+            }
+        })
+        .collect()
+}
+
 /// Reads all rows from the `bom` table of `conn`, returning them as [`ResolvedBomEntry`]
 /// values sorted by designator.
 ///
@@ -616,6 +666,112 @@ mod tests {
         assert_eq!(mfr, r#"["TDK","Murata"]"#);
         assert_eq!(mpn, r#"["C0402X5R","GRM0332"]"#);
         assert_eq!(alt_mfr.as_deref(), Some("[]"));
+    }
+
+    #[test]
+    fn group_for_excel_single_part_no_alts() {
+        let entries = vec![ResolvedBomEntry {
+            designator: "C1".into(),
+            part_id: "CAP00100".into(),
+            mfr: vec!["TDK".into()],
+            mpn: vec!["C0402".into()],
+            alt_mfr: vec![],
+            alt_mpn: vec![],
+        }];
+        let rows = group_for_excel(&entries);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].part_id, "CAP00100");
+        assert_eq!(rows[0].designators, vec!["C1"]);
+        assert_eq!(rows[0].qty, 1);
+        assert_eq!(rows[0].mfr, "TDK");
+        assert_eq!(rows[0].mpn, "C0402");
+    }
+
+    #[test]
+    fn group_for_excel_multiple_designators_sorted() {
+        let entries = vec![
+            ResolvedBomEntry {
+                designator: "C3".into(),
+                part_id: "CAP00100".into(),
+                mfr: vec!["TDK".into()],
+                mpn: vec!["C0402".into()],
+                alt_mfr: vec![],
+                alt_mpn: vec![],
+            },
+            ResolvedBomEntry {
+                designator: "C1".into(),
+                part_id: "CAP00100".into(),
+                mfr: vec!["TDK".into()],
+                mpn: vec!["C0402".into()],
+                alt_mfr: vec![],
+                alt_mpn: vec![],
+            },
+        ];
+        let rows = group_for_excel(&entries);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].designators, vec!["C1", "C3"]);
+        assert_eq!(rows[0].qty, 2);
+    }
+
+    #[test]
+    fn group_for_excel_alts_appended_to_primary() {
+        let entries = vec![ResolvedBomEntry {
+            designator: "R1".into(),
+            part_id: "RES00100".into(),
+            mfr: vec!["Yageo".into()],
+            mpn: vec!["RC0402".into()],
+            alt_mfr: vec!["Vishay".into()],
+            alt_mpn: vec!["CRCW0402".into()],
+        }];
+        let rows = group_for_excel(&entries);
+        assert_eq!(rows[0].mfr, "Yageo; Vishay");
+        assert_eq!(rows[0].mpn, "RC0402; CRCW0402");
+    }
+
+    #[test]
+    fn group_for_excel_multiple_parts_alphabetical_order() {
+        let entries = vec![
+            ResolvedBomEntry {
+                designator: "R1".into(),
+                part_id: "RES00100".into(),
+                mfr: vec![],
+                mpn: vec![],
+                alt_mfr: vec![],
+                alt_mpn: vec![],
+            },
+            ResolvedBomEntry {
+                designator: "C1".into(),
+                part_id: "CAP00100".into(),
+                mfr: vec![],
+                mpn: vec![],
+                alt_mfr: vec![],
+                alt_mpn: vec![],
+            },
+        ];
+        let rows = group_for_excel(&entries);
+        assert_eq!(rows[0].part_id, "CAP00100");
+        assert_eq!(rows[1].part_id, "RES00100");
+    }
+
+    #[test]
+    fn group_for_excel_empty_mfr_produces_empty_string() {
+        let entries = vec![ResolvedBomEntry {
+            designator: "U1".into(),
+            part_id: "IC00001".into(),
+            mfr: vec![],
+            mpn: vec![],
+            alt_mfr: vec![],
+            alt_mpn: vec![],
+        }];
+        let rows = group_for_excel(&entries);
+        assert_eq!(rows[0].mfr, "");
+        assert_eq!(rows[0].mpn, "");
+    }
+
+    #[test]
+    fn group_for_excel_empty_input_returns_empty() {
+        let rows = group_for_excel(&[]);
+        assert!(rows.is_empty());
     }
 
     #[test]
