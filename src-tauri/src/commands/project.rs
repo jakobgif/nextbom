@@ -562,7 +562,7 @@ pub async fn create_nextbom_file(
 
     let entries = parse_csv(Path::new(&csv_path))?;
 
-    let default_db_name = format!("{}.nextbom", pcb_name);
+    let default_db_name = format!("{}_v{}.nextbom", pcb_name, bom_version);
 
     let window = app.get_webview_window("main")
         .ok_or_else(|| "main window not found".to_string())?;
