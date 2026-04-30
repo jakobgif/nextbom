@@ -30,6 +30,11 @@ design_variant: string | null,
  */
 engineer: string | null, 
 /**
+ * Absolute path to the `.xlsx` file used as a BOM export template.
+ * When `None`, the default blank-sheet format is used.
+ */
+bom_template_path: string | null, 
+/**
  * Timestamp of the last change (Unix timestamp in milliseconds, UTC)
  * Updates when BOM is created, project file is modified, or any change occurs
  */

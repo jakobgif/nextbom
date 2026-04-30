@@ -37,6 +37,10 @@ pub struct Project {
     /// Name of the engineer responsible for the project
     pub engineer: Option<String>,
 
+    /// Absolute path to the `.xlsx` file used as a BOM export template.
+    /// When `None`, the default blank-sheet format is used.
+    pub bom_template_path: Option<String>,
+
     /// Timestamp of the last change (Unix timestamp in milliseconds, UTC)
     /// Updates when BOM is created, project file is modified, or any change occurs
     pub last_change: i64,
@@ -57,6 +61,7 @@ impl Project {
             project_specifics: None,
             design_variant: None,
             engineer: None,
+            bom_template_path: None,
             last_change: now,
             schema: env!("CARGO_PKG_VERSION").to_string(),
         }
@@ -98,4 +103,9 @@ impl Project {
         self.touch();
     }
 
+    /// Sets the BOM template path and updates the last_change timestamp
+    pub fn set_bom_template_path(&mut self, path: Option<String>) {
+        self.bom_template_path = path;
+        self.touch();
+    }
 }
