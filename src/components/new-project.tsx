@@ -32,6 +32,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
   const [availableSpecifics, setAvailableSpecifics] = useState<string[]>([]);
   const [projectSpecifics, setProjectSpecifics] = useState("");
   const [specificsOpen, setSpecificsOpen] = useState(false);
+  const [bomTemplatePath, setBomTemplatePath] = useState("");
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;
@@ -45,6 +46,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
       setAvailableSpecifics([]);
       setProjectSpecifics("");
       setSpecificsOpen(false);
+      setBomTemplatePath("");
     }
   }, [open]);
 
@@ -67,6 +69,17 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
     }
   };
 
+  const handlePickTemplate = async () => {
+    const selected = await openFilePicker({
+      title: "Select BOM Template File",
+      filters: [{ name: "Excel Workbook", extensions: ["xlsx"] }],
+      multiple: false,
+      directory: false,
+    });
+    if (!selected) return;
+    setBomTemplatePath(selected as string);
+  };
+
   const handleCreate = async () => {
     if (!title.trim()) return;
 
@@ -77,6 +90,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
         projectSpecifics: projectSpecifics || null,
         designVariant: null,
         databasePath: databasePath || null,
+        bomTemplatePath: bomTemplatePath || null,
       });
       setOpen(false);
     } catch (error: any) {
@@ -91,6 +105,10 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
 
   const dbFilename = databasePath
     ? databasePath.replace(/\\/g, "/").split("/").pop()
+    : "";
+
+  const templateFilename = bomTemplatePath
+    ? bomTemplatePath.replace(/\\/g, "/").split("/").pop()
     : "";
 
   const specificsOptions = [
@@ -180,6 +198,20 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
                 ))}
               </PopoverContent>
             </Popover>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>BOM Template (Optional)</Label>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={templateFilename}
+                placeholder="No template selected"
+                className="flex-1 cursor-default"
+              />
+              <Button type="button" variant="outline" onClick={handlePickTemplate}>
+                Browse
+              </Button>
+            </div>
           </div>
         </div>
         <DialogFooter>
