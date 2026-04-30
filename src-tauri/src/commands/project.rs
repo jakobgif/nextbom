@@ -789,9 +789,9 @@ pub async fn export_bom_to_excel(
         // Migrate older `.nextbom` files that pre-date the engineer column.
         let _ = conn.execute("ALTER TABLE metadata ADD COLUMN engineer TEXT", []);
 
-        let (pcb_name, bom_version, design_variant, engineer, csv_imported_at, default_filename) = conn
+        let (pcb_name, bom_version, design_variant, engineer, csv_imported_at, project_specifics, default_filename) = conn
             .query_row(
-                "SELECT pcb_name, bom_version, design_variant, engineer, csv_imported_at FROM metadata WHERE id = 1",
+                "SELECT pcb_name, bom_version, design_variant, engineer, csv_imported_at, project_specifics FROM metadata WHERE id = 1",
                 [],
                 |row| Ok((
                     row.get::<_, String>(0)?,
@@ -799,13 +799,14 @@ pub async fn export_bom_to_excel(
                     row.get::<_, String>(2)?,
                     row.get::<_, Option<String>>(3)?,
                     row.get::<_, i64>(4)?,
+                    row.get::<_, Option<String>>(5)?,
                 )),
             )
-            .map(|(n, v, d, e, t)| {
+            .map(|(n, v, d, e, t, ps)| {
                 let filename = format!("{}_v{}.xlsx", n, v);
-                (n, v, d, e.unwrap_or_default(), t, filename)
+                (n, v, d, e.unwrap_or_default(), t, ps, filename)
             })
-            .unwrap_or_else(|_| (String::new(), String::new(), String::new(), String::new(), 0, "bom.xlsx".to_string()));
+            .unwrap_or_else(|_| (String::new(), String::new(), String::new(), String::new(), 0, None, "bom.xlsx".to_string()));
 
         let creation_date = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(csv_imported_at)
             .map(|dt| dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M:%S").to_string())
@@ -813,7 +814,7 @@ pub async fn export_bom_to_excel(
 
         let entries = read_resolved_bom(&conn)
             .map_err(|e| format!("Failed to read BOM: {}", e))?;
-        let rows = group_for_excel(&entries);
+        let rows = group_for_excel(&entries, project_specifics.as_deref());
 
         let template_path = state.inner.lock().unwrap()
             .current_project

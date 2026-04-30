@@ -183,10 +183,8 @@ pub fn parse_csv(csv_path: &Path) -> Result<Vec<BomEntry>, String> {
 ///
 /// `mfr`/`mpn` come from the main `parts` table; `alt_mfr`/`alt_mpn` come from the
 /// project-specific `alt_*` table (empty when no alt table is configured or the part has no
-/// alt entries). When `alt_mfr` is non-empty, `part_id` has the project-specifics suffix
-/// appended (e.g. `RES00100_2025`).
+/// alt entries).
 struct ResolvedPart {
-    part_id: String,
     mfr: Vec<String>,
     mpn: Vec<String>,
     alt_mfr: Vec<String>,
@@ -220,8 +218,8 @@ pub fn migrate_bom_for_resolution(conn: &Connection) -> SqliteResult<()> {
 ///
 /// Results from the main `parts` table are returned in `mfr`/`mpn`. If `project_specifics`
 /// is `Some(s)` and the table `alt_s` exists, its matches are returned separately in
-/// `alt_mfr`/`alt_mpn`, and `part_id` has `_{project_specifics}` appended
-/// (e.g. `RES00100_2025`).
+/// `alt_mfr`/`alt_mpn`. The original `part_id` is never modified — the suffix that signals
+/// "this row has an alternative" is applied only at Excel export time.
 fn resolve_part_id(
     nextdb_conn: &Connection,
     part_id: &str,
@@ -282,21 +280,16 @@ fn resolve_part_id(
         }
     }
 
-    let resolved_part_id = if !alt_mfr.is_empty() {
-        format!("{}_{}", part_id, project_specifics.unwrap())
-    } else {
-        part_id.to_string()
-    };
-
-    Ok(ResolvedPart { part_id: resolved_part_id, mfr, mpn, alt_mfr, alt_mpn })
+    Ok(ResolvedPart { mfr, mpn, alt_mfr, alt_mpn })
 }
 
 /// Resolves all BOM entries in `nextbom_conn` against the parts database in `nextdb_conn`.
 ///
 /// Migrates the `bom` table to add `mfr`, `mpn`, `alt_mfr`, and `alt_mpn` columns (if not
 /// present), then populates them with JSON arrays. Main-table results go into `mfr`/`mpn`;
-/// alt-table results go into `alt_mfr`/`alt_mpn`. Part IDs with alt matches have the
-/// project-specifics suffix appended.
+/// alt-table results go into `alt_mfr`/`alt_mpn`. The `part_id` column is left untouched —
+/// alt matches are signalled by the alt columns, and the project-specifics suffix is only
+/// appended at Excel export time.
 ///
 /// Returns the number of rows updated.
 pub fn resolve_bom_entries(
@@ -335,8 +328,8 @@ pub fn resolve_bom_entries(
 
         nextbom_conn
             .execute(
-                "UPDATE bom SET part_id = ?1, mfr = ?2, mpn = ?3, alt_mfr = ?4, alt_mpn = ?5 WHERE designator = ?6",
-                rusqlite::params![resolved.part_id, mfr_json, mpn_json, alt_mfr_json, alt_mpn_json, designator],
+                "UPDATE bom SET mfr = ?1, mpn = ?2, alt_mfr = ?3, alt_mpn = ?4 WHERE designator = ?5",
+                rusqlite::params![mfr_json, mpn_json, alt_mfr_json, alt_mpn_json, designator],
             )
             .map_err(|e| format!("Failed to update bom entry: {}", e))?;
     }
@@ -376,8 +369,13 @@ pub struct ExcelBomRow {
 ///
 /// Designators sharing the same `part_id` are collected and sorted. `mfr` and `mpn` come from
 /// the first entry for each `part_id` (they are identical for all designators of the same part);
-/// alt values are appended behind the primary values in the same cell.
-pub fn group_for_excel(entries: &[ResolvedBomEntry]) -> Vec<ExcelBomRow> {
+/// alt values are appended behind the primary values in the same cell, separated by a newline.
+///
+/// When `project_specifics` is `Some(s)` and a row has alternative entries, the output
+/// `part_id` is suffixed with `_{s}` (e.g. `RES00100_2025`) — this is the export-time signal
+/// to procurement that an alternative applies. The `part_id` stored in the `bom` table is
+/// never modified.
+pub fn group_for_excel(entries: &[ResolvedBomEntry], project_specifics: Option<&str>) -> Vec<ExcelBomRow> {
     use std::collections::BTreeMap;
 
     let mut map: BTreeMap<
@@ -399,9 +397,13 @@ pub fn group_for_excel(entries: &[ResolvedBomEntry]) -> Vec<ExcelBomRow> {
                 mfr.iter().chain(alt_mfr.iter()).map(String::as_str).collect();
             let all_mpn: Vec<&str> =
                 mpn.iter().chain(alt_mpn.iter()).map(String::as_str).collect();
+            let display_part_id = match project_specifics {
+                Some(s) if !alt_mfr.is_empty() => format!("{}_{}", part_id, s),
+                _ => part_id,
+            };
             ExcelBomRow {
                 qty: designators.len(),
-                part_id,
+                part_id: display_part_id,
                 designators,
                 mfr: all_mfr.join("\n"),
                 mpn: all_mpn.join("\n"),
@@ -820,7 +822,6 @@ mod tests {
         make_nextdb(&db);
 
         let r = resolve_part_id(&db, "CAP00100", None).unwrap();
-        assert_eq!(r.part_id, "CAP00100");
         assert_eq!(r.mfr, vec!["TDK", "Murata"]);
         assert_eq!(r.mpn, vec!["C0402X5R", "GRM0332"]);
         assert!(r.alt_mfr.is_empty());
@@ -833,7 +834,6 @@ mod tests {
         make_nextdb(&db);
 
         let r = resolve_part_id(&db, "UNKNOWN", None).unwrap();
-        assert_eq!(r.part_id, "UNKNOWN");
         assert!(r.mfr.is_empty());
         assert!(r.mpn.is_empty());
         assert!(r.alt_mfr.is_empty());
@@ -841,7 +841,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_part_id_with_alt_separates_and_appends_suffix() {
+    fn resolve_part_id_with_alt_separates_into_alt_columns() {
         let db = Connection::open_in_memory().unwrap();
         make_nextdb(&db);
         db.execute_batch(
@@ -851,7 +851,6 @@ mod tests {
         .unwrap();
 
         let r = resolve_part_id(&db, "RES00100", Some("2025")).unwrap();
-        assert_eq!(r.part_id, "RES00100_2025");
         assert_eq!(r.mfr, vec!["Yageo"]);
         assert_eq!(r.mpn, vec!["RC0402"]);
         assert_eq!(r.alt_mfr, vec!["Vishay"]);
@@ -859,13 +858,13 @@ mod tests {
     }
 
     #[test]
-    fn resolve_part_id_alt_table_missing_does_not_append_suffix() {
+    fn resolve_part_id_alt_table_missing_yields_empty_alt_columns() {
         let db = Connection::open_in_memory().unwrap();
         make_nextdb(&db);
 
         let r = resolve_part_id(&db, "RES00100", Some("nonexistent")).unwrap();
-        assert_eq!(r.part_id, "RES00100");
         assert!(r.alt_mfr.is_empty());
+        assert!(r.alt_mpn.is_empty());
     }
 
     #[test]
@@ -902,7 +901,7 @@ mod tests {
             alt_mfr: vec![],
             alt_mpn: vec![],
         }];
-        let rows = group_for_excel(&entries);
+        let rows = group_for_excel(&entries, None);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].part_id, "CAP00100");
         assert_eq!(rows[0].designators, vec!["C1"]);
@@ -931,7 +930,7 @@ mod tests {
                 alt_mpn: vec![],
             },
         ];
-        let rows = group_for_excel(&entries);
+        let rows = group_for_excel(&entries, None);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].designators, vec!["C1", "C3"]);
         assert_eq!(rows[0].qty, 2);
@@ -947,7 +946,7 @@ mod tests {
             alt_mfr: vec!["Vishay".into()],
             alt_mpn: vec!["CRCW0402".into()],
         }];
-        let rows = group_for_excel(&entries);
+        let rows = group_for_excel(&entries, None);
         assert_eq!(rows[0].mfr, "Yageo\nVishay");
         assert_eq!(rows[0].mpn, "RC0402\nCRCW0402");
     }
@@ -972,7 +971,7 @@ mod tests {
                 alt_mpn: vec![],
             },
         ];
-        let rows = group_for_excel(&entries);
+        let rows = group_for_excel(&entries, None);
         assert_eq!(rows[0].part_id, "CAP00100");
         assert_eq!(rows[1].part_id, "RES00100");
     }
@@ -987,15 +986,55 @@ mod tests {
             alt_mfr: vec![],
             alt_mpn: vec![],
         }];
-        let rows = group_for_excel(&entries);
+        let rows = group_for_excel(&entries, None);
         assert_eq!(rows[0].mfr, "");
         assert_eq!(rows[0].mpn, "");
     }
 
     #[test]
     fn group_for_excel_empty_input_returns_empty() {
-        let rows = group_for_excel(&[]);
+        let rows = group_for_excel(&[], None);
         assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn group_for_excel_suffixes_part_id_only_when_alt_present() {
+        let entries = vec![
+            ResolvedBomEntry {
+                designator: "R1".into(),
+                part_id: "RES00100".into(),
+                mfr: vec!["Yageo".into()],
+                mpn: vec!["RC0402".into()],
+                alt_mfr: vec!["Vishay".into()],
+                alt_mpn: vec!["CRCW0402".into()],
+            },
+            ResolvedBomEntry {
+                designator: "C1".into(),
+                part_id: "CAP00100".into(),
+                mfr: vec!["TDK".into()],
+                mpn: vec!["C0402".into()],
+                alt_mfr: vec![],
+                alt_mpn: vec![],
+            },
+        ];
+        let rows = group_for_excel(&entries, Some("2025"));
+        // CAP00100 (no alt) is unchanged; RES00100 (has alt) gets the suffix.
+        assert_eq!(rows[0].part_id, "CAP00100");
+        assert_eq!(rows[1].part_id, "RES00100_2025");
+    }
+
+    #[test]
+    fn group_for_excel_no_specifics_never_suffixes() {
+        let entries = vec![ResolvedBomEntry {
+            designator: "R1".into(),
+            part_id: "RES00100".into(),
+            mfr: vec!["Yageo".into()],
+            mpn: vec!["RC0402".into()],
+            alt_mfr: vec!["Vishay".into()],
+            alt_mpn: vec!["CRCW0402".into()],
+        }];
+        let rows = group_for_excel(&entries, None);
+        assert_eq!(rows[0].part_id, "RES00100");
     }
 
     #[test]
@@ -1012,7 +1051,7 @@ mod tests {
         let count = resolve_bom_entries(&nextbom, &nextdb, Some("2025")).unwrap();
         assert_eq!(count, 2);
 
-        // R1 has an alt entry — alt columns should be populated and part_id suffixed
+        // R1 has an alt entry — alt columns are populated, part_id is left untouched.
         let part_id: String = nextbom
             .query_row("SELECT part_id FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
             .unwrap();
@@ -1022,11 +1061,11 @@ mod tests {
         let alt_mpn: String = nextbom
             .query_row("SELECT alt_mpn FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(part_id, "RES00100_2025");
+        assert_eq!(part_id, "RES00100");
         assert_eq!(alt_mfr, r#"["Vishay"]"#);
         assert_eq!(alt_mpn, r#"["CRCW0402"]"#);
 
-        // C1 has no alt entry — alt columns should be empty arrays, part_id unchanged
+        // C1 has no alt entry — alt columns are empty arrays, part_id unchanged.
         let part_id: String = nextbom
             .query_row("SELECT part_id FROM bom WHERE designator = 'C1'", [], |r| r.get(0))
             .unwrap();
@@ -1035,5 +1074,35 @@ mod tests {
             .unwrap();
         assert_eq!(part_id, "CAP00100");
         assert_eq!(alt_mfr, r#"[]"#);
+    }
+
+    #[test]
+    fn resolve_bom_entries_is_idempotent_under_repeated_calls() {
+        // Re-running resolution must not mutate part_id, otherwise the second pass would look
+        // up a stale value and lose the resolution.
+        let nextbom = Connection::open_in_memory().unwrap();
+        let nextdb = Connection::open_in_memory().unwrap();
+        make_nextbom(&nextbom);
+        make_nextdb(&nextdb);
+        nextdb.execute_batch(
+            "CREATE TABLE alt_2025 (ID TEXT, mfr TEXT, mpn TEXT);
+             INSERT INTO alt_2025 VALUES ('RES00100', 'Vishay', 'CRCW0402');",
+        ).unwrap();
+
+        resolve_bom_entries(&nextbom, &nextdb, Some("2025")).unwrap();
+        resolve_bom_entries(&nextbom, &nextdb, Some("2025")).unwrap();
+
+        let part_id: String = nextbom
+            .query_row("SELECT part_id FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
+            .unwrap();
+        let mfr: String = nextbom
+            .query_row("SELECT mfr FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
+            .unwrap();
+        let alt_mfr: String = nextbom
+            .query_row("SELECT alt_mfr FROM bom WHERE designator = 'R1'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(part_id, "RES00100");
+        assert_eq!(mfr, r#"["Yageo"]"#);
+        assert_eq!(alt_mfr, r#"["Vishay"]"#);
     }
 }
