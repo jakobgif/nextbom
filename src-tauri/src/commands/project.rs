@@ -190,10 +190,13 @@ pub async fn open_project(
     let path = if let Some(p) = path {
         p
     } else {
+        let window = app.get_webview_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
         let dialog = app.dialog()
             .file()
             .set_title("Open project")
-            .add_filter("NextBOM Project", &["nbp"]);
+            .add_filter("NextBOM Project", &["nbp"])
+            .set_parent(&window);
 
         let file_path = tauri::async_runtime::spawn_blocking(move || {
             dialog.blocking_pick_file()
@@ -270,11 +273,14 @@ pub async fn save_project(app: AppHandle, state: State<'_, AppState>, save_as: O
     };
 
     let path = if needs_dialog {
+        let window = app.get_webview_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
         let dialog = app.dialog()
             .file()
             .set_title("Save project as")
             .set_file_name(&default_filename)
-            .add_filter("NextBOM Project", &["nbp"]);
+            .add_filter("NextBOM Project", &["nbp"])
+            .set_parent(&window);
 
         let file_path = tauri::async_runtime::spawn_blocking(move || {
             dialog.blocking_save_file()
@@ -446,10 +452,13 @@ pub fn set_design_variant(app: AppHandle, design_variant: String, state: State<A
 /// and emits `project-changed` on success. Returns an error if no project is currently open.
 #[tauri::command]
 pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
     let dialog = app.dialog()
         .file()
         .set_title("Select Parts Database File")
-        .add_filter("Parts Database", &["nextdb"]);
+        .add_filter("Parts Database", &["nextdb"])
+        .set_parent(&window);
 
     let file_path = tauri::async_runtime::spawn_blocking(move || {
         dialog.blocking_pick_file()
@@ -485,10 +494,13 @@ pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Re
 /// extension), which the frontend uses as the default PCBA name.
 #[tauri::command]
 pub async fn load_csv(app: AppHandle, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
     let csv_dialog = app.dialog()
         .file()
         .set_title("Select CSV file")
-        .add_filter("CSV", &["csv"]);
+        .add_filter("CSV", &["csv"])
+        .set_parent(&window);
 
     let csv_path = tauri::async_runtime::spawn_blocking(move || {
         csv_dialog.blocking_pick_file()
@@ -545,11 +557,14 @@ pub async fn create_nextbom_file(
 
     let default_db_name = format!("{}.nextbom", pcb_name);
 
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
     let db_dialog = app.dialog()
         .file()
         .set_title("Save file as")
         .set_file_name(&default_db_name)
-        .add_filter("NextBOM working file", &["nextbom"]);
+        .add_filter("NextBOM working file", &["nextbom"])
+        .set_parent(&window);
 
     let db_path = tauri::async_runtime::spawn_blocking(move || {
         db_dialog.blocking_save_file()
@@ -665,10 +680,13 @@ pub async fn resolve_bom_manufacturers(
             return Err("No NextBOM file from step 1 available".to_string());
         }
     } else {
+        let window = app.get_webview_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
         let dialog = app.dialog()
             .file()
             .set_title("Select NextBOM working file")
-            .add_filter("NextBOM working file", &["nextbom"]);
+            .add_filter("NextBOM working file", &["nextbom"])
+            .set_parent(&window);
 
         let picked = tauri::async_runtime::spawn_blocking(move || {
             dialog.blocking_pick_file()
