@@ -690,7 +690,12 @@ pub async fn resolve_bom_manufacturers(
 
     let count = resolve_bom_entries(&nextbom_conn, &nextdb_conn, project_specifics.as_deref())?;
 
-    update_resolution_metadata(&nextbom_conn, &db_path, project_specifics.as_deref(), database_version)
+    let resolved_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+
+    update_resolution_metadata(&nextbom_conn, &db_path, project_specifics.as_deref(), database_version, resolved_at)
         .map_err(|e| format!("Failed to update resolution metadata: {}", e))?;
 
     Ok(serde_json::json!({

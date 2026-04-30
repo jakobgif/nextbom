@@ -70,7 +70,8 @@ pub fn create_database(path: &Path) -> SqliteResult<Connection> {
             csv_imported_at  INTEGER NOT NULL,
             project_specifics TEXT,
             database_path    TEXT,
-            database_version TEXT
+            database_version TEXT,
+            resolved_at      INTEGER
         )",
         [],
     )?;
@@ -107,10 +108,14 @@ pub fn update_resolution_metadata(
     database_path: &str,
     project_specifics: Option<&str>,
     database_version: Option<&str>,
+    resolved_at: i64,
 ) -> SqliteResult<()> {
+    // Migrate older files that pre-date the resolved_at column.
+    let _ = conn.execute("ALTER TABLE metadata ADD COLUMN resolved_at INTEGER", []);
+
     conn.execute(
-        "UPDATE metadata SET database_path = ?1, project_specifics = ?2, database_version = ?3 WHERE id = 1",
-        rusqlite::params![database_path, project_specifics, database_version],
+        "UPDATE metadata SET database_path = ?1, project_specifics = ?2, database_version = ?3, resolved_at = ?4 WHERE id = 1",
+        rusqlite::params![database_path, project_specifics, database_version, resolved_at],
     )?;
     Ok(())
 }
