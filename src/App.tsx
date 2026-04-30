@@ -400,6 +400,7 @@ function ResolveManufacturers({ pendingNextbomPath, onResolved }: { pendingNextb
 }
 
 function ExportBom({ pendingResolvedPath }: { pendingResolvedPath?: string }) {
+  const { project } = useProjectStore();
   const [autoLoad, setAutoLoad] = useState(true);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -433,6 +434,12 @@ function ExportBom({ pendingResolvedPath }: { pendingResolvedPath?: string }) {
         <label htmlFor="auto-load-3" className={`text-sm select-none ${!pendingResolvedPath ? "text-muted-foreground/50" : "cursor-pointer"}`}>
           Load resolved NextBOM from step 2
         </label>
+      </div>
+      <div className="flex flex-col gap-1 text-xs font-mono">
+        <div className="flex gap-2">
+          <span className="text-muted-foreground/60 w-40 shrink-0">BOM template</span>
+          <span className="text-muted-foreground">{project?.bom_template_path ?? "—"}</span>
+        </div>
       </div>
       <div className="flex flex-row items-center">
         <Button onClick={handleExport} disabled={loading}>Export to Excel</Button>
