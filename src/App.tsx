@@ -265,9 +265,18 @@ function CreateNextbomFile(){
 }
 
 function ResolveManufacturers() {
+  const { project } = useProjectStore();
   const [resolved, setResolved] = useState(false);
   const [resolving, setResolving] = useState(false);
   const [nextbomPath, setNextbomPath] = useState("");
+  const [dbVersion, setDbVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!project?.database_path) return;
+    invoke<{ database_version: string | null; available_alternatives: string[] }>("get_database_info")
+      .then(({ database_version }) => setDbVersion(database_version))
+      .catch(() => {});
+  }, [project?.database_path]);
 
   const handleResolve = async () => {
     setResolving(true);
@@ -285,11 +294,27 @@ function ResolveManufacturers() {
     }
   };
 
+  const rows: [string, string][] = [
+    ["database", project?.database_path ?? "—"],
+    ["database version", dbVersion ?? "—"],
+    ["active alternative", project?.project_specifics ?? "—"],
+  ];
+
   return (
-    <div className="flex flex-row items-center ml-5">
-      <Button onClick={handleResolve} disabled={resolving}>Resolve</Button>
-      {resolved && <Check className="ml-2 size-4 text-green-500" />}
-      {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
+    <div className="flex flex-col items-start gap-4 ml-5">
+      <div className="flex flex-col gap-1 text-xs font-mono">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex gap-2">
+            <span className="text-muted-foreground/60 w-40 shrink-0">{label}</span>
+            <span className="text-muted-foreground">{value}</span>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-row items-center">
+        <Button onClick={handleResolve} disabled={resolving}>Resolve</Button>
+        {resolved && <Check className="ml-2 size-4 text-green-500" />}
+        {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
+      </div>
     </div>
   );
 }

@@ -610,6 +610,28 @@ pub async fn create_nextbom_file(
 
 // ── BOM resolution commands ───────────────────────────────────────────────────
 
+#[tauri::command]
+pub fn get_database_info(state: State<AppState>) -> Result<serde_json::Value, String> {
+    let db_path = {
+        let inner = state.inner.lock().unwrap();
+        let project = inner.current_project.as_ref()
+            .ok_or_else(|| "No project currently open".to_string())?;
+        project.database_path.clone()
+            .ok_or_else(|| "No parts database linked to this project".to_string())?
+    };
+
+    let conn = rusqlite::Connection::open(&db_path)
+        .map_err(|e| format!("Failed to open database: {}", e))?;
+
+    let meta = read_nextdb_metadata(&conn)?;
+    let alts = list_alt_tables(&conn)?;
+
+    Ok(serde_json::json!({
+        "database_version": meta.map(|m| m.database_version),
+        "available_alternatives": alts
+    }))
+}
+
 /// Presents a file-open dialog to select a `.nextbom` working file, then resolves every BOM
 /// entry against the parts database linked to the open project.
 ///
