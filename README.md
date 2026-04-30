@@ -1,8 +1,34 @@
 <div align="center">
-  <h3 align="center">nextbom</h3>
-  <p align="center">
-    A tool to create BOMs for electronic projects.
-  </p>
+
+# nextbom
+
+**A desktop app for creating Bills of Materials for electronic projects.**
+
+[![CI](https://github.com/jakobgif/nextbom/actions/workflows/ci.yml/badge.svg)](https://github.com/jakobgif/nextbom/actions/workflows/ci.yml)
+
+[Documentation](https://jakobgif.github.io/nextbom/) · [Report a Bug](https://github.com/jakobgif/nextbom/issues)
+
 </div>
 
-With this software, it is possible to separate parts specified in the design from actual manufacturer part numbers. In the design, only part IDs are assigned to the components. During the BOM creation process, the manufacturers and manufacturer part numbers are fetched for each ID from a separate database file. This way, manufacturers can be easily changed without changing the fundamental design. Additionally, this software supports "project-specific alternatives". These are manufacturers and manufacturer part numbers that are only allowed to be used on a specific project.
+---
+
+nextbom separates the concerns of *design* and *procurement*. In the design, components are assigned generic part IDs — not manufacturer part numbers. When generating a BOM, nextbom resolves those IDs to real MPNs from a separate `.nextdb` database file.
+
+This means manufacturers can be swapped without touching the schematic, and per-project alternative parts are supported out of the box.
+
+## Features
+
+- Import component lists from CSV
+- Resolve part IDs to manufacturer part numbers via a shared database
+- Override resolutions per-project with project-specific alternatives
+- Export a ready-to-use BOM
+
+## Getting Started
+
+See the **[documentation](https://jakobgif.github.io/nextbom/)** for workflow and file format details.
+
+## Built With
+
+- [Tauri 2](https://tauri.app) — native desktop shell
+- [React 19](https://react.dev) + [TypeScript](https://www.typescriptlang.org) — UI
+- [Rust](https://www.rust-lang.org) — backend logic
