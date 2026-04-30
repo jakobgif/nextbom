@@ -82,6 +82,7 @@ pub fn run() {
             commands::create_nextbom_file,
             commands::resolve_bom_manufacturers,
             commands::get_resolved_bom,
+            commands::export_bom_to_excel,
             commands::get_database_info,
             commands::get_recent_projects,
             commands::remove_recent_project,

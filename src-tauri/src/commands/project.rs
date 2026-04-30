@@ -1,4 +1,4 @@
-use crate::data::{create_database, insert_bom_entries, insert_metadata, list_alt_tables, parse_csv, read_nextdb_metadata, read_resolved_bom, resolve_bom_entries, update_resolution_metadata, Metadata, Project, ProjectState, RecentProject, RecentProjects, ResolvedBomEntry};
+use crate::data::{create_database, group_for_excel, insert_bom_entries, insert_metadata, list_alt_tables, parse_csv, read_nextdb_metadata, read_resolved_bom, resolve_bom_entries, update_resolution_metadata, Metadata, Project, ProjectState, RecentProject, RecentProjects, ResolvedBomEntry};
 use crate::AppState;
 use std::path::Path;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -729,6 +729,101 @@ pub fn get_resolved_bom(nextbom_path: String) -> Result<Vec<ResolvedBomEntry>, S
     let conn = rusqlite::Connection::open(&nextbom_path)
         .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
     read_resolved_bom(&conn).map_err(|e| format!("Failed to read BOM: {}", e))
+}
+
+/// Exports the resolved BOM from a `.nextbom` file to an Excel `.xlsx` file.
+///
+/// When `nextbom_path` is `None`, presents a file-open dialog to select the input file.
+/// Always presents a save-file dialog to choose the output location. Returns `Err("cancelled")`
+/// if the user dismisses either dialog. On success, returns the path of the exported file.
+///
+/// Rows are grouped by `part_id` (one row per part), with all designators joined by `"; "`.
+/// The `mfr` and `mpn` columns contain primary values followed by alternatives, all in one cell.
+#[tauri::command]
+pub async fn export_bom_to_excel(
+    app: AppHandle,
+    nextbom_path: Option<String>,
+) -> Result<String, String> {
+    // Resolve input path — open file picker if not provided
+    let nextbom_path = if let Some(p) = nextbom_path {
+        p
+    } else {
+        let window = app.get_webview_window("main")
+            .ok_or_else(|| "main window not found".to_string())?;
+        let dialog = app.dialog()
+            .file()
+            .set_title("Select resolved NextBOM file")
+            .add_filter("NextBOM working file", &["nextbom"])
+            .set_parent(&window);
+        let picked = tauri::async_runtime::spawn_blocking(move || {
+            dialog.blocking_pick_file()
+        }).await.map_err(|e| e.to_string())?;
+        match picked {
+            Some(p) => p.to_string(),
+            None => return Err("cancelled".to_string()),
+        }
+    };
+
+    // Read BOM data and build grouped rows (all sync, no async across this block)
+    let (default_filename, groups) = {
+        let conn = rusqlite::Connection::open(&nextbom_path)
+            .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
+
+        let default_filename = conn
+            .query_row(
+                "SELECT pcb_name, bom_version FROM metadata WHERE id = 1",
+                [],
+                |row| Ok(format!("{}_v{}.xlsx", row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .unwrap_or_else(|_| "bom.xlsx".to_string());
+
+        let entries = read_resolved_bom(&conn)
+            .map_err(|e| format!("Failed to read BOM: {}", e))?;
+
+        (default_filename, group_for_excel(&entries))
+    };
+
+    // Save-file dialog
+    let window = app.get_webview_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    let dialog = app.dialog()
+        .file()
+        .set_title("Save BOM as Excel")
+        .set_file_name(&default_filename)
+        .add_filter("Excel Workbook", &["xlsx"])
+        .set_parent(&window);
+
+    let save_path = tauri::async_runtime::spawn_blocking(move || {
+        dialog.blocking_save_file()
+    }).await.map_err(|e| e.to_string())?;
+
+    let save_path = match save_path {
+        Some(p) => p.to_string(),
+        None => return Err("cancelled".to_string()),
+    };
+
+    // Build Excel workbook
+    let mut workbook = rust_xlsxwriter::Workbook::new();
+    let worksheet = workbook.add_worksheet();
+
+    worksheet.write(0, 0, "part_id").map_err(|e| e.to_string())?;
+    worksheet.write(0, 1, "designators").map_err(|e| e.to_string())?;
+    worksheet.write(0, 2, "qty").map_err(|e| e.to_string())?;
+    worksheet.write(0, 3, "mfr").map_err(|e| e.to_string())?;
+    worksheet.write(0, 4, "mpn").map_err(|e| e.to_string())?;
+
+    for (row_idx, bom_row) in groups.into_iter().enumerate() {
+        let row = (row_idx + 1) as u32;
+        worksheet.write(row, 0, &bom_row.part_id).map_err(|e| e.to_string())?;
+        worksheet.write(row, 1, bom_row.designators.join("; ")).map_err(|e| e.to_string())?;
+        worksheet.write(row, 2, bom_row.qty as u32).map_err(|e| e.to_string())?;
+        worksheet.write(row, 3, &bom_row.mfr).map_err(|e| e.to_string())?;
+        worksheet.write(row, 4, &bom_row.mpn).map_err(|e| e.to_string())?;
+    }
+
+    workbook.save(&save_path).map_err(|e| e.to_string())?;
+
+    Ok(save_path)
 }
 
 // ── Recent projects commands ──────────────────────────────────────────────────
