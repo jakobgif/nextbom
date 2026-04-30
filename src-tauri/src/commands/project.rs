@@ -511,11 +511,13 @@ pub async fn load_csv(app: AppHandle, state: State<'_, AppState>) -> Result<serd
         .unwrap_or("")
         .to_string();
 
+    let path_for_response = csv_path.clone();
     state.inner.lock().unwrap().pending_csv_path = Some(csv_path);
 
     Ok(serde_json::json!({
         "message": format!("Imported {} lines from CSV", entries.len()),
-        "filename_stem": filename_stem
+        "filename_stem": filename_stem,
+        "csv_path": path_for_response
     }))
 }
 
@@ -532,7 +534,7 @@ pub async fn create_nextbom_file(
     pcb_name: String,
     bom_version: String,
     design_variant: String,
-) -> Result<String, String> {
+) -> Result<serde_json::Value, String> {
     let csv_path = {
         let inner = state.inner.lock().unwrap();
         inner.pending_csv_path.clone()
@@ -600,7 +602,10 @@ pub async fn create_nextbom_file(
         let _ = app.emit("project-changed", snapshot);
     }
 
-    Ok(format!("Successfully created NextBOM file with {} entries", entries.len()))
+    Ok(serde_json::json!({
+        "message": format!("Successfully created NextBOM file with {} entries", entries.len()),
+        "nextbom_path": db_path
+    }))
 }
 
 // ── BOM resolution commands ───────────────────────────────────────────────────
@@ -617,7 +622,7 @@ pub async fn create_nextbom_file(
 pub async fn resolve_bom_manufacturers(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<String, String> {
+) -> Result<serde_json::Value, String> {
     let (db_path, project_specifics) = {
         let inner = state.inner.lock().unwrap();
         let project = inner.current_project.as_ref()
@@ -655,7 +660,10 @@ pub async fn resolve_bom_manufacturers(
     update_resolution_metadata(&nextbom_conn, &db_path, project_specifics.as_deref(), database_version)
         .map_err(|e| format!("Failed to update resolution metadata: {}", e))?;
 
-    Ok(format!("Resolved {} entries", count))
+    Ok(serde_json::json!({
+        "message": format!("Resolved {} entries", count),
+        "nextbom_path": nextbom_path
+    }))
 }
 
 // ── Recent projects commands ──────────────────────────────────────────────────

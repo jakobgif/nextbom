@@ -109,7 +109,9 @@ function App() {
 function CreateNextbomFile(){
   const { project } = useProjectStore();
   const [csvLoaded, setCsvLoaded] = useState(false);
+  const [csvPath, setCsvPath] = useState("");
   const [fileCreated, setFileCreated] = useState(false);
+  const [nextbomPath, setNextbomPath] = useState("");
   const [csvPicking, setCsvPicking] = useState(false);
   const [fileCreating, setFileCreating] = useState(false);
 
@@ -127,8 +129,9 @@ function CreateNextbomFile(){
   const handleImportCsv = async () => {
     setCsvPicking(true);
     try {
-      const { message } = await invoke<{ message: string; filename_stem: string }>("load_csv");
+      const { message, csv_path } = await invoke<{ message: string; filename_stem: string; csv_path: string }>("load_csv");
       setCsvLoaded(true);
+      setCsvPath(csv_path);
       toast.success(message);
     } catch (error: any) {
       if (error !== "No file selected") {
@@ -152,13 +155,14 @@ function CreateNextbomFile(){
     setVersionError(false);
     setFileCreating(true);
     try {
-      const result = await invoke<string>("create_nextbom_file", {
+      const { message, nextbom_path } = await invoke<{ message: string; nextbom_path: string }>("create_nextbom_file", {
         pcbName,
         bomVersion: version,
         designVariant,
       });
       setFileCreated(true);
-      toast.success(result);
+      setNextbomPath(nextbom_path);
+      toast.success(message);
     } catch (error: any) {
       if (error !== "No save location selected") {
         toast.error(error.toString());
@@ -184,6 +188,7 @@ function CreateNextbomFile(){
             </TooltipContent>
           </Tooltip>
           {csvLoaded && <Check className="ml-2 size-4 text-green-500" />}
+          {csvPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{csvPath}</span>}
         </div>
       </Field>
 
@@ -253,6 +258,7 @@ function CreateNextbomFile(){
       <div className="flex flex-row items-center">
         <Button onClick={handleCreateFile} disabled={!csvLoaded || fileCreating}>Create NextBOM file</Button>
         {fileCreated && <Check className="ml-2 size-4 text-green-500" />}
+        {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
       </div>
     </div>
   )
@@ -261,13 +267,15 @@ function CreateNextbomFile(){
 function ResolveManufacturers() {
   const [resolved, setResolved] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [nextbomPath, setNextbomPath] = useState("");
 
   const handleResolve = async () => {
     setResolving(true);
     try {
-      const result = await invoke<string>("resolve_bom_manufacturers");
+      const { message, nextbom_path } = await invoke<{ message: string; nextbom_path: string }>("resolve_bom_manufacturers");
       setResolved(true);
-      toast.success(result);
+      setNextbomPath(nextbom_path);
+      toast.success(message);
     } catch (error: any) {
       if (error !== "No file selected") {
         toast.error(error.toString());
@@ -281,6 +289,7 @@ function ResolveManufacturers() {
     <div className="flex flex-row items-center ml-5">
       <Button onClick={handleResolve} disabled={resolving}>Resolve</Button>
       {resolved && <Check className="ml-2 size-4 text-green-500" />}
+      {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
     </div>
   );
 }
