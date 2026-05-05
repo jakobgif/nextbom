@@ -56,7 +56,7 @@ pub fn list_alt_tables(conn: &Connection) -> Result<Vec<String>, String> {
     let mut names = Vec::new();
     for row in rows {
         let name = row.map_err(|e| format!("Failed to read table name: {}", e))?;
-        names.push(name.trim_start_matches("alt_").to_string());
+        names.push(name.strip_prefix("alt_").unwrap_or(&name).to_string());
     }
     Ok(names)
 }
@@ -89,6 +89,19 @@ mod tests {
 
         let tables = list_alt_tables(&conn).unwrap();
         assert!(tables.is_empty());
+    }
+
+    #[test]
+    fn list_alt_tables_strips_only_one_prefix() {
+        // A table whose specifics part itself starts with `alt_` must keep that segment;
+        // `trim_start_matches` would have stripped it greedily.
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE alt_alt_x (ID TEXT, mfr TEXT, mpn TEXT);",
+        ).unwrap();
+
+        let tables = list_alt_tables(&conn).unwrap();
+        assert_eq!(tables, vec!["alt_x"]);
     }
 
     #[test]
