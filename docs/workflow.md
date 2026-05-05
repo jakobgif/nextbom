@@ -32,7 +32,7 @@ After a successful import, nextbom shows the file path and a checkmark.
 Before creating the file, set these fields:
 
 **PCBA Name**
-: The name of the printed circuit board assembly. Defaults to the project title (Auto mode) but can be edited freely by unchecking **Auto**. Stored as metadata in the generated database.
+: The name of the printed circuit board assembly. Stored as metadata in the generated database. With **Auto** ticked, the value is filled from the source selected in the dropdown next to the checkbox — either the project title or the imported CSV's filename (without extension). Untick **Auto** to type a custom name. The CSV-filename option is only selectable once a CSV has been imported.
 
 **BOM Version**
 : A numeric version identifier for this BOM (digits only). Stored as metadata alongside the PCBA name and design variant.
