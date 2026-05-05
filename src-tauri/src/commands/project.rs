@@ -792,6 +792,17 @@ pub async fn export_bom_to_excel(
         let conn = rusqlite::Connection::open(&nextbom_path)
             .map_err(|e| format!("Failed to open .nextbom file: {}", e))?;
 
+        // Reject files that haven't been through step 2; the resolution columns are only
+        // added by `migrate_bom_for_resolution`, so their absence means mfr/mpn would export empty.
+        let resolved: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('bom') WHERE name='mfr'",
+            [],
+            |row| row.get(0),
+        ).map_err(|e| format!("Failed to check resolution status: {}", e))?;
+        if resolved == 0 {
+            return Err("BOM has not been resolved yet. Run step 2 (Resolve Manufacturers & MPNs) first.".to_string());
+        }
+
         // Migrate older `.nextbom` files that pre-date the engineer column.
         let _ = conn.execute("ALTER TABLE metadata ADD COLUMN engineer TEXT", []);
 
