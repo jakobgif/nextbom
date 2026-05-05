@@ -504,7 +504,7 @@ pub async fn set_database_path(app: AppHandle, state: State<'_, AppState>) -> Re
 ///
 /// Returns `Err("No file selected")` if the user cancels the dialog, or a parse error if the
 /// CSV is malformed. On success, returns the entry count and the filename stem (without
-/// extension), which the frontend uses as the default PCBA name.
+/// extension), which the frontend offers as one of the auto-source options for the PCBA name.
 #[tauri::command]
 pub async fn load_csv(app: AppHandle, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
     let window = app.get_webview_window("main")

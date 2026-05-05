@@ -10,6 +10,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./
 import { Tooltip, TooltipContent, TooltipTrigger } from "./components/ui/tooltip";
 import { Field, FieldError, FieldLabel } from "./components/ui/field";
 import { Checkbox } from "./components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select";
 import { NewProjectDialog } from "./components/new-project";
 import { toast } from "sonner";
 import { invoke } from "@tauri-apps/api/core";
@@ -130,7 +131,9 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
   const [fileCreated, setFileCreated] = useState(false);
   const [nextbomPath, setNextbomPath] = useState("");
   const [pcbNameAuto, setPcbNameAuto] = useState(true);
+  const [pcbNameAutoSource, setPcbNameAutoSource] = useState<"project" | "csv">("project");
   const [pcbNameManual, setPcbNameManual] = useState("");
+  const [csvFilenameStem, setCsvFilenameStem] = useState("");
   const [pcbNameError, setPcbNameError] = useState(false);
 
   const [version, setVersion] = useState("");
@@ -138,13 +141,15 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
 
   const [designVariant, setDesignVariant] = useState(project?.design_variant ?? "");
 
-  const pcbName = pcbNameAuto ? (project?.title ?? "") : pcbNameManual;
+  const autoPcbName = pcbNameAutoSource === "csv" ? csvFilenameStem : (project?.title ?? "");
+  const pcbName = pcbNameAuto ? autoPcbName : pcbNameManual;
 
   const handleImportCsv = async () => {
     try {
-      const { message, csv_path } = await invoke<{ message: string; filename_stem: string; csv_path: string }>("load_csv");
+      const { message, csv_path, filename_stem } = await invoke<{ message: string; filename_stem: string; csv_path: string }>("load_csv");
       setCsvLoaded(true);
       setCsvPath(csv_path);
+      setCsvFilenameStem(filename_stem);
       toast.success(message);
     } catch (error: any) {
       if (error !== "No file selected") {
@@ -202,13 +207,13 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
       </Field>
 
       <div className="flex flex-col gap-6">
-        <Field className="w-96">
+        <Field>
           <FieldLabel>PCBA name</FieldLabel>
           <div className="flex flex-col">
             <div className="flex flex-row items-center">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="block w-full">
+                  <span className="block w-72">
                     <Input
                       value={pcbName}
                       disabled={pcbNameAuto}
@@ -223,9 +228,22 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
                   <TooltipTrigger asChild>
                     <span><Checkbox checked={pcbNameAuto} onCheckedChange={(v) => { setPcbNameAuto(!!v); if (v) setPcbNameError(false); }} /></span>
                   </TooltipTrigger>
-                  <TooltipContent className="select-none">Use the project title as the PCBA name.</TooltipContent>
+                  <TooltipContent className="select-none">Auto-fill the PCBA name from the selected source.</TooltipContent>
                 </Tooltip>
                 <p>Auto</p>
+                <Select
+                  value={pcbNameAutoSource}
+                  onValueChange={(v) => setPcbNameAutoSource(v as "project" | "csv")}
+                  disabled={!pcbNameAuto}
+                >
+                  <SelectTrigger size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="project">Project title</SelectItem>
+                    <SelectItem value="csv" disabled={!csvFilenameStem}>CSV filename</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             {pcbNameError && <FieldError className="mt-1">PCBA name is required</FieldError>}
@@ -243,7 +261,7 @@ function CreateNextbomFile({ onFileCreated }: { onFileCreated?: (path: string) =
                   onChange={(e) => { setVersion(e.target.value); setVersionError(false); }}
                 />
               </TooltipTrigger>
-              <TooltipContent className="select-none">Increase the BOM version when the design<br />evolves over time. Not meant to identify<br />design variants.</TooltipContent>
+              <TooltipContent className="select-none">Increase the BOM version when the design<br />evolves over time. Not meant to identify<br />design variants or versions.</TooltipContent>
             </Tooltip>
             {versionError && <FieldError className="mt-1">BOM version must be a number</FieldError>}
           </div>
