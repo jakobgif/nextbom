@@ -504,6 +504,12 @@ pub fn write_default_xlsx(path: &std::path::Path, rows: &[ExcelBomRow]) -> Resul
                 .get_alignment_mut()
                 .set_horizontal(umya_spreadsheet::structs::HorizontalAlignmentValues::Left);
         }
+        // mfr/mpn may contain newline-joined alternatives; without wrap_text Excel hides the line break.
+        for col in [4u32, 5u32] {
+            sheet.get_style_mut((col, r))
+                .get_alignment_mut()
+                .set_wrap_text(true);
+        }
     }
 
     umya_spreadsheet::writer::xlsx::write(&book, path).map_err(|e| e.to_string())
