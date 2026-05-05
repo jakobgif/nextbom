@@ -153,6 +153,8 @@ pub fn create_project(
     inner.current_project = Some(project.clone());
     inner.current_project_path = None;
     inner.has_unsaved_changes = true;
+    inner.pending_csv_path = None;
+    inner.pending_nextbom_path = None;
     let snapshot = ProjectState { project: Some(project), has_unsaved_changes: true };
     drop(inner);
 
@@ -172,6 +174,8 @@ pub fn close_project(app: AppHandle, state: State<AppState>) -> Result<(), Strin
     inner.current_project = None;
     inner.current_project_path = None;
     inner.has_unsaved_changes = false;
+    inner.pending_csv_path = None;
+    inner.pending_nextbom_path = None;
     let snapshot = ProjectState { project: None, has_unsaved_changes: false };
     drop(inner);
 
@@ -239,6 +243,8 @@ pub async fn open_project(
     inner.current_project = Some(project.clone());
     inner.current_project_path = Some(path.clone());
     inner.has_unsaved_changes = false;
+    inner.pending_csv_path = None;
+    inner.pending_nextbom_path = None;
     inner.recent_projects.add(path, project.title.clone());
     let recent = inner.recent_projects.clone();
     let snapshot = ProjectState { project: Some(project), has_unsaved_changes: false };

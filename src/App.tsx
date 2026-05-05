@@ -27,6 +27,12 @@ function App() {
     initialize();
   }, []);
 
+  // Reset cross-step "use pending" paths whenever the active project changes.
+  useEffect(() => {
+    setPendingNextbomPath("");
+    setPendingResolvedPath("");
+  }, [project?.uuid]);
+
   return (
     <div className="h-screen flex flex-col overflow-clip">
       <Titlebar/>
