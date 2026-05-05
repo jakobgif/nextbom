@@ -147,7 +147,7 @@ export function NewProjectDialog({ trigger, open: controlledOpen, onOpenChange }
             <Label>Engineer (Optional)</Label>
             <Input
               id="engineer"
-              placeholder="John Doe"
+              placeholder="JF"
               value={engineer}
               onChange={(e) => setEngineer(e.target.value)}
             />
