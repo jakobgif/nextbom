@@ -1,7 +1,7 @@
 import "./App.css";
 import { useEffect, useState } from "react";
 import { loadSavedTheme } from "./lib/custom-theme";
-import { Check, ListPlus } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ListPlus } from "lucide-react";
 import { Titlebar } from "./components/titlebar";
 import { Button } from "./components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "./components/ui/empty";
@@ -307,6 +307,7 @@ function ResolveManufacturers({ pendingNextbomPath, onResolved }: { pendingNextb
   const [dbVersion, setDbVersion] = useState<string | null>(null);
   const [autoLoad, setAutoLoad] = useState(true);
   const [bomEntries, setBomEntries] = useState<ResolvedBomEntry[]>([]);
+  const [tableCollapsed, setTableCollapsed] = useState(true);
 
   useEffect(() => {
     if (!project?.database_path) return;
@@ -380,6 +381,16 @@ function ResolveManufacturers({ pendingNextbomPath, onResolved }: { pendingNextb
         {nextbomPath && <span className="ml-3 text-xs text-muted-foreground font-mono">{nextbomPath}</span>}
       </div>
       {grouped.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setTableCollapsed((c) => !c)}
+          className="flex items-center gap-1 self-start text-xs text-muted-foreground hover:text-foreground"
+        >
+          {tableCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+          {tableCollapsed ? "Show resolved parts" : "Hide resolved parts"}
+        </button>
+      )}
+      {grouped.length > 0 && !tableCollapsed && (
         <div className="w-full overflow-auto max-h-72 rounded border border-border">
           <table className="w-full text-xs font-mono border-collapse">
             <thead className="sticky top-0 bg-background border-b border-border">
